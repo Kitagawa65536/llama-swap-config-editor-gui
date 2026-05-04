@@ -25,12 +25,26 @@ class ModelForm:
 
 
 @dataclass
+class ModelListItem:
+    model_id: str
+    subtitle: str
+    model_path: str
+    ttl: str
+
+
+@dataclass
 class GlobalSettingsForm:
     health_check_timeout: str = ""
     log_level: str = ""
     start_port: str = ""
     global_ttl: str = ""
     send_loading_state: bool | None = None
+
+
+@dataclass
+class AdvancedSection:
+    key: str
+    yaml_fragment: str
 
 
 @dataclass

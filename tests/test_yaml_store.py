@@ -1,8 +1,8 @@
 from pathlib import Path
 from uuid import uuid4
 
-from command_builder import update_form_from_mapping
-from models import ModelForm
+from config_services import AdvancedConfigService, GlobalSettingsService, ModelConfigService
+from models import GlobalSettingsForm, ModelForm
 from schema_validator import ConfigSchemaValidator
 from yaml_store import YamlConfigStore
 
@@ -28,11 +28,12 @@ models:
         encoding="utf-8",
     )
     store = YamlConfigStore()
+    model_service = ModelConfigService()
     data, _raw = store.load(config)
 
-    form = update_form_from_mapping("old-model", data["models"]["old-model"])
+    form = model_service.model_form_from_mapping("old-model", data["models"]["old-model"])
     form.model_path = "/new.gguf"
-    store.apply_model_form(data, "old-model", form)
+    model_service.apply_model_form(data, "old-model", form)
 
     dumped = store.dump_to_string(data)
     assert "# top comment" in dumped
@@ -46,9 +47,10 @@ def test_save_creates_backup_and_replaces_file():
     config = tmp_path / "config.yaml"
     config.write_text("models: {}\n", encoding="utf-8")
     store = YamlConfigStore()
+    model_service = ModelConfigService()
     data, _raw = store.load(config)
     form = ModelForm(model_id="added", llama_server_path="llama-server", model_path="/m.gguf")
-    store.apply_model_form(data, None, form)
+    model_service.apply_model_form(data, None, form)
 
     ok, message, backup = store.save(config, data)
 
@@ -89,3 +91,63 @@ def test_parse_raw_rejects_invalid_yaml_without_touching_existing_state():
         pass
 
     assert "models" in data
+
+
+def test_model_service_builds_list_items_from_existing_models():
+    store = YamlConfigStore()
+    model_service = ModelConfigService()
+    data = store.parse_raw(
+        """models:
+  sample:
+    name: Sample Model
+    ttl: 60
+    cmd: llama-server --model /models/sample.gguf --port ${PORT}
+"""
+    )
+
+    items = model_service.list_items(data)
+
+    assert len(items) == 1
+    assert items[0].model_id == "sample"
+    assert items[0].subtitle == "Sample Model"
+    assert items[0].model_path == "/models/sample.gguf"
+    assert items[0].ttl == "60"
+
+
+def test_global_settings_service_applies_and_removes_root_settings():
+    store = YamlConfigStore()
+    service = GlobalSettingsService()
+    data = store.parse_raw("healthCheckTimeout: 30\nlogLevel: info\n")
+
+    service.apply_global_settings(
+        data,
+        GlobalSettingsForm(
+            health_check_timeout="",
+            log_level="debug",
+            start_port="8080",
+            send_loading_state=True,
+        ),
+    )
+
+    assert "healthCheckTimeout" not in data
+    assert data["logLevel"] == "debug"
+    assert data["startPort"] == 8080
+    assert data["sendLoadingState"] is True
+
+
+def test_advanced_service_exposes_sections_and_matrix_groups_conflict():
+    store = YamlConfigStore()
+    service = AdvancedConfigService(store)
+    data = store.parse_raw(
+        """macros:
+  gpu: --n-gpu-layers 99
+matrix: {}
+groups: {}
+"""
+    )
+
+    sections = service.sections(data)
+
+    assert [section.key for section in sections] == ["macros", "matrix", "groups"]
+    assert "gpu:" in sections[0].yaml_fragment
+    assert service.has_matrix_groups_conflict(data)

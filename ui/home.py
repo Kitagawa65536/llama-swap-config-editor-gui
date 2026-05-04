@@ -20,6 +20,7 @@ def build_home(app) -> ft.Control:
                 wrap=True,
                 controls=[
                     ft.Button("config.yaml を開く / Open config", on_click=app.pick_config),
+                    # Bundled demo schema support is deferred; users currently select an external config-schema.json.
                     ft.OutlinedButton("config-schema.json を選択 / Select schema", on_click=app.pick_schema),
                     ft.Button(
                         "GGUFからモデルを追加 / Add model from GGUF",

@@ -6,16 +6,16 @@ import flet as ft
 from ruamel.yaml.comments import CommentedMap
 
 from app_settings import AppSettingsRepository
-from command_builder import build_command, update_form_from_mapping
+from config_services import AdvancedConfigService, GlobalSettingsService, ModelConfigService
 from gguf_importer import import_many
-from models import ConfigState, GlobalSettingsForm, ModelForm
+from models import AdvancedSection, ConfigState, GlobalSettingsForm, ModelForm, ModelListItem
 from schema_validator import ConfigSchemaValidator
 from ui.advanced import build_advanced
 from ui.global_settings import build_global_settings
 from ui.home import build_home
 from ui.models_view import build_models
 from ui.raw_yaml import build_raw_yaml
-from yaml_store import YamlConfigStore, YamlStoreError
+from yaml_store import YamlConfigStore
 
 
 ROUTES = {
@@ -35,6 +35,9 @@ class LlamaSwapConfigEditor:
         self.page.window_height = 760
 
         self.store = YamlConfigStore()
+        self.model_service = ModelConfigService()
+        self.global_settings_service = GlobalSettingsService()
+        self.advanced_service = AdvancedConfigService(self.store)
         self.settings_repo = AppSettingsRepository()
         self.settings = self.settings_repo.load()
         self.state = ConfigState()
@@ -176,7 +179,7 @@ class LlamaSwapConfigEditor:
                 context_length=suggestion.context_length,
                 gpu_offload_layers=suggestion.gpu_offload_layers,
             )
-            self.store.apply_model_form(self.state.data, None, form)
+            self.model_service.apply_model_form(self.state.data, None, form)
             self.selected_model_id = model_id
             self.current_model_form = form
         self.mark_dirty(f"{len(suggestions)}件のGGUFを追加しました / GGUF model(s) added")
@@ -191,7 +194,7 @@ class LlamaSwapConfigEditor:
             self.state.dirty = False
             self.selected_model_id = None
             self.current_model_form = None
-            self.global_form = self.store.global_settings_form(data)
+            self.global_form = self.global_settings_service.global_settings_form(data)
             self.raw_editor = None
             self.settings_repo.add_recent_config(self.settings, str(path))
             self.state.last_message = "config読込OK / Config loaded"
@@ -203,10 +206,10 @@ class LlamaSwapConfigEditor:
     def select_model(self, model_id: str) -> None:
         if self.state.data is None:
             return
-        for key, mapping in self.store.model_items(self.state.data):
+        for key, mapping in self.model_service.model_items(self.state.data):
             if key == model_id:
                 self.selected_model_id = model_id
-                self.current_model_form = update_form_from_mapping(key, mapping)
+                self.current_model_form = self.model_service.model_form_from_mapping(key, mapping)
                 break
         self.refresh()
 
@@ -216,7 +219,7 @@ class LlamaSwapConfigEditor:
             self.state.data["models"] = CommentedMap()
         model_id = self.unique_model_id("new-model")
         form = ModelForm(model_id=model_id, llama_server_path=self.settings.default_llama_server_path)
-        self.store.apply_model_form(self.state.data, None, form)
+        self.model_service.apply_model_form(self.state.data, None, form)
         self.selected_model_id = model_id
         self.current_model_form = form
         self.mark_dirty("空のモデルを追加しました / Empty model added")
@@ -226,7 +229,7 @@ class LlamaSwapConfigEditor:
             return
         try:
             original = self.selected_model_id
-            self.store.apply_model_form(self.state.data, original, self.current_model_form)
+            self.model_service.apply_model_form(self.state.data, original, self.current_model_form)
             self.selected_model_id = self.current_model_form.model_id
             self.state.raw_yaml = self.store.dump_to_string(self.state.data)
             self.raw_editor = None
@@ -238,14 +241,14 @@ class LlamaSwapConfigEditor:
     def apply_global_settings(self, _event=None) -> None:
         if self.state.data is None:
             self.state.data = CommentedMap()
-        self.store.apply_global_settings(self.state.data, self.global_form)
+        self.global_settings_service.apply_global_settings(self.state.data, self.global_form)
         self.state.raw_yaml = self.store.dump_to_string(self.state.data)
         self.raw_editor = None
         self.mark_dirty("Global Settingsを反映しました / Global settings applied")
 
     def preview_current_cmd(self, _event=None) -> None:
         if self.current_model_form:
-            self.state.last_message = build_command(self.current_model_form)
+            self.state.last_message = self.model_service.preview_command(self.current_model_form)
             self.refresh()
 
     def on_raw_changed(self, event: ft.ControlEvent) -> None:
@@ -256,7 +259,7 @@ class LlamaSwapConfigEditor:
         try:
             data = self.store.parse_raw(self.state.raw_yaml)
             self.state.data = data
-            self.global_form = self.store.global_settings_form(data)
+            self.global_form = self.global_settings_service.global_settings_form(data)
             self.selected_model_id = None
             self.current_model_form = None
             self.mark_dirty("Raw YAMLをフォームへ反映しました / Raw YAML applied")
@@ -312,8 +315,16 @@ class LlamaSwapConfigEditor:
             count += 1
         return candidate
 
-    def dump_fragment(self, value) -> str:
-        return self.store.dump_to_string(value)
+    def model_list_items(self) -> list[ModelListItem]:
+        if self.state.data is None:
+            return []
+        return self.model_service.list_items(self.state.data)
+
+    def advanced_sections(self) -> list[AdvancedSection]:
+        return self.advanced_service.sections(self.state.data)
+
+    def has_advanced_conflict(self) -> bool:
+        return self.advanced_service.has_matrix_groups_conflict(self.state.data)
 
     def mark_dirty(self, message: str) -> None:
         self.state.dirty = True

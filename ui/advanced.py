@@ -4,19 +4,16 @@ import flet as ft
 
 
 def build_advanced(app) -> ft.Control:
-    data = app.state.data or {}
-    has_matrix = "matrix" in data
-    has_groups = "groups" in data
     snippets = []
-    for key in ["macros", "matrix", "groups", "hooks", "peers"]:
-        if key in data:
-            snippets.append(ft.Text(f"{key}:", weight=ft.FontWeight.BOLD))
-            snippets.append(ft.Text(app.dump_fragment(data[key]), selectable=True))
+    # Advanced editing is deferred; this view currently exposes read-only YAML fragments.
+    for section in app.advanced_sections():
+        snippets.append(ft.Text(f"{section.key}:", weight=ft.FontWeight.BOLD))
+        snippets.append(ft.Text(section.yaml_fragment, selectable=True))
     if not snippets:
         snippets.append(ft.Text("Advanced項目はありません / No advanced sections"))
 
     controls = [ft.Text("Advanced", size=24, weight=ft.FontWeight.BOLD)]
-    if has_matrix and has_groups:
+    if app.has_advanced_conflict():
         controls.append(
             ft.Container(
                 padding=10,

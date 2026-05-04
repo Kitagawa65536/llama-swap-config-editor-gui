@@ -2,30 +2,25 @@ from __future__ import annotations
 
 import flet as ft
 
-from command_builder import update_form_from_mapping
-
 
 def build_models(app) -> ft.Control:
-    items = app.store.model_items(app.state.data) if app.state.data is not None else []
+    items = app.model_list_items()
     cards = []
-    for model_id, model_data in items:
-        form = update_form_from_mapping(model_id, model_data)
-        subtitle = form.name or ", ".join(form.aliases) or "-"
-        model_path = form.model_path or "(model path unknown)"
+    for item in items:
         cards.append(
             ft.Container(
                 padding=10,
                 border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
                 border_radius=6,
-                on_click=lambda e, mid=model_id: app.select_model(mid),
-                bgcolor=ft.Colors.SECONDARY_CONTAINER if app.selected_model_id == model_id else None,
+                on_click=lambda e, mid=item.model_id: app.select_model(mid),
+                bgcolor=ft.Colors.SECONDARY_CONTAINER if app.selected_model_id == item.model_id else None,
                 content=ft.Column(
                     spacing=4,
                     controls=[
-                        ft.Text(model_id, weight=ft.FontWeight.BOLD),
-                        ft.Text(subtitle, size=12),
-                        ft.Text(model_path, size=11, overflow=ft.TextOverflow.ELLIPSIS),
-                        ft.Text(f"ttl: {form.ttl or '-'}", size=11),
+                        ft.Text(item.model_id, weight=ft.FontWeight.BOLD),
+                        ft.Text(item.subtitle, size=12),
+                        ft.Text(item.model_path, size=11, overflow=ft.TextOverflow.ELLIPSIS),
+                        ft.Text(f"ttl: {item.ttl}", size=11),
                     ],
                 ),
             )
@@ -97,6 +92,7 @@ def _model_form(app) -> ft.Control:
                 ft.Row(
                     controls=[
                         _field("seed", f.seed, set_attr("seed")),
+                        # KV cache GPU offload is captured in the form but command emission is intentionally deferred.
                         ft.Dropdown(
                             label="KV cache GPU offload",
                             value="on" if f.kv_cache_gpu_offload is True else "off" if f.kv_cache_gpu_offload is False else "unset",

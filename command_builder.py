@@ -67,6 +67,7 @@ def build_command(form: ModelForm) -> str:
         ("--cache-type-k", form.k_cache_quant_type),
         ("--cache-type-v", form.v_cache_quant_type),
     ]
+    # KV cache GPU offload command emission is intentionally deferred until the exact llama.cpp flag policy is chosen.
     for option, value in option_map:
         text = str(value).strip()
         if text:
