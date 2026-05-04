@@ -1,0 +1,6 @@
+flet>=0.28.0
+ruamel.yaml>=0.18.6
+jsonschema>=4.22.0
+gguf>=0.10.0
+platformdirs>=4.2.2
+pytest>=8.2.0

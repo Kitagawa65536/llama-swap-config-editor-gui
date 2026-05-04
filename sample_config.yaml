@@ -1,0 +1,14 @@
+# Minimal llama-swap config for llama-swap Config Editor GUI.
+healthCheckTimeout: 30
+logLevel: info
+startPort: 8080
+globalTTL: 600
+sendLoadingState: true
+
+models:
+  sample-model:
+    name: Sample Model
+    aliases:
+      - sample
+    ttl: 600
+    cmd: llama-server --model /path/to/model.gguf --port ${PORT} --ctx-size 4096
