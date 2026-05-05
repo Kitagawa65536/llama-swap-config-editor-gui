@@ -7,7 +7,7 @@ from ruamel.yaml.comments import CommentedMap
 
 from app_settings import AppSettingsRepository
 from config_services import AdvancedConfigService, GlobalSettingsService, ModelConfigService
-from gguf_importer import import_many
+from gguf_importer import import_gguf, import_many
 from models import AdvancedSection, ConfigState, GlobalSettingsForm, ModelForm, ModelListItem
 from schema_validator import ConfigSchemaValidator
 from ui.advanced import build_advanced
@@ -44,6 +44,7 @@ class LlamaSwapConfigEditor:
         self.validator = ConfigSchemaValidator()
         self.selected_model_id: str | None = None
         self.current_model_form: ModelForm | None = None
+        self.gguf_context_limits: dict[str, int] = {}
         self.global_form = GlobalSettingsForm()
         self.raw_editor: ft.TextField | None = None
 
@@ -177,8 +178,11 @@ class LlamaSwapConfigEditor:
                 llama_server_path=self.settings.default_llama_server_path,
                 model_path=suggestion.model_path,
                 context_length=suggestion.context_length,
+                context_length_max=suggestion.context_length_max,
                 gpu_offload_layers=suggestion.gpu_offload_layers,
             )
+            if suggestion.context_length_max is not None:
+                self.gguf_context_limits[self.gguf_path_key(suggestion.model_path)] = suggestion.context_length_max
             self.model_service.apply_model_form(self.state.data, None, form)
             self.selected_model_id = model_id
             self.current_model_form = form
@@ -210,6 +214,9 @@ class LlamaSwapConfigEditor:
             if key == model_id:
                 self.selected_model_id = model_id
                 self.current_model_form = self.model_service.model_form_from_mapping(key, mapping)
+                context_limit = self.gguf_context_limits.get(self.gguf_path_key(self.current_model_form.model_path))
+                if context_limit is not None:
+                    self.current_model_form.context_length_max = context_limit
                 break
         self.refresh()
 
@@ -250,6 +257,44 @@ class LlamaSwapConfigEditor:
         if self.current_model_form:
             self.state.last_message = self.model_service.preview_command(self.current_model_form)
             self.refresh()
+
+    def load_current_model_gguf_header(self, _event=None) -> None:
+        if self.current_model_form is None:
+            return
+        model_path = self.current_model_form.model_path.strip()
+        if not model_path:
+            self.state.last_message = "GGUF model pathを入力してください / Enter a GGUF model path first"
+            self.refresh()
+            return
+
+        suggestion = import_gguf(model_path)
+        if suggestion.context_length_max is None:
+            error = suggestion.metadata.get("read_error")
+            detail = f": {error}" if error else ""
+            self.state.last_message = f"Context長の最大値を取得できませんでした / Context max not found{detail}"
+            self.refresh()
+            return
+
+        context_limit = suggestion.context_length_max
+        self.gguf_context_limits[self.gguf_path_key(suggestion.model_path)] = context_limit
+        self.current_model_form.context_length_max = context_limit
+
+        current = self.current_model_form.context_length.strip()
+        if not current:
+            self.current_model_form.context_length = str(context_limit)
+            self.state.last_message = f"GGUFヘッダ読込OK。Context長を最大値 {context_limit} にしました / GGUF header loaded"
+        else:
+            try:
+                current_value = int(current)
+            except ValueError:
+                self.state.last_message = f"GGUFヘッダ読込OK。最大 Context長: {context_limit} / GGUF header loaded"
+            else:
+                if current_value > context_limit:
+                    self.current_model_form.context_length = str(context_limit)
+                    self.state.last_message = f"Context長が最大値を超えていたため {context_limit} に丸めました / Clamped to GGUF max"
+                else:
+                    self.state.last_message = f"GGUFヘッダ読込OK。最大 Context長: {context_limit} / GGUF header loaded"
+        self.refresh()
 
     def on_raw_changed(self, event: ft.ControlEvent) -> None:
         self.state.raw_yaml = event.control.value
@@ -314,6 +359,12 @@ class LlamaSwapConfigEditor:
             candidate = f"{base}-{count}"
             count += 1
         return candidate
+
+    def gguf_path_key(self, path: str) -> str:
+        try:
+            return str(Path(path).expanduser().resolve())
+        except OSError:
+            return path
 
     def model_list_items(self) -> list[ModelListItem]:
         if self.state.data is None:

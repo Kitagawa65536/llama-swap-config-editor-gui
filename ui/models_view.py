@@ -48,8 +48,8 @@ def build_models(app) -> ft.Control:
     return ft.Row(expand=True, controls=[left, ft.VerticalDivider(width=1), right])
 
 
-def _field(label: str, value: str, on_change, password: bool = False) -> ft.TextField:
-    return ft.TextField(label=label, value=value, on_change=on_change, password=password, dense=True)
+def _field(label: str, value: str, on_change, password: bool = False, expand: bool | int | None = None) -> ft.TextField:
+    return ft.TextField(label=label, value=value, on_change=on_change, password=password, dense=True, expand=expand)
 
 
 def _model_form(app) -> ft.Control:
@@ -76,10 +76,19 @@ def _model_form(app) -> ft.Control:
                 _field("model_id", f.model_id, set_attr("model_id")),
                 _field("name", f.name, set_attr("name")),
                 _field("llama-server path", f.llama_server_path, set_attr("llama_server_path")),
-                _field("GGUF model path", f.model_path, set_attr("model_path")),
                 ft.Row(
                     controls=[
-                        _field("context length", f.context_length, set_attr("context_length")),
+                        _field("GGUF model path", f.model_path, set_attr("model_path"), expand=True),
+                        ft.OutlinedButton(
+                            "GGUFヘッダ読込 / Read GGUF header",
+                            icon=ft.Icons.DATA_OBJECT,
+                            on_click=app.load_current_model_gguf_header,
+                        ),
+                    ]
+                ),
+                ft.Row(
+                    controls=[
+                        _context_length_control(f),
                         _field("GPU offload layers", f.gpu_offload_layers, set_attr("gpu_offload_layers")),
                     ]
                 ),
@@ -123,3 +132,67 @@ def _model_form(app) -> ft.Control:
             ],
         ),
     )
+
+
+def _context_length_control(f) -> ft.Control:
+    if not f.context_length_max:
+        return _field("context length", f.context_length, lambda e: setattr(f, "context_length", e.control.value))
+
+    limit = f.context_length_max
+    slider_value = _slider_context_value(f.context_length, limit)
+
+    def on_text_change(e):
+        value = e.control.value.strip()
+        if not value:
+            f.context_length = ""
+            return
+        try:
+            numeric_value = int(value)
+        except ValueError:
+            f.context_length = value
+            return
+        numeric_value = max(1, min(numeric_value, limit))
+        f.context_length = str(numeric_value)
+        context_field.value = f.context_length
+        context_slider.value = numeric_value
+        context_field.update()
+        context_slider.update()
+
+    def on_slider_change(e):
+        numeric_value = int(e.control.value)
+        f.context_length = str(numeric_value)
+        context_field.value = f.context_length
+        context_field.update()
+
+    context_field = ft.TextField(
+        label=f"context length (max {limit})",
+        value=f.context_length,
+        on_change=on_text_change,
+        dense=True,
+        width=190,
+    )
+    context_slider = ft.Slider(
+        min=1,
+        max=limit,
+        value=slider_value,
+        round=0,
+        label="{value}",
+        on_change=on_slider_change,
+        expand=True,
+    )
+    return ft.Column(
+        expand=True,
+        spacing=2,
+        controls=[
+            context_field,
+            context_slider,
+        ],
+    )
+
+
+def _slider_context_value(value: str, limit: int) -> int:
+    try:
+        numeric_value = int(str(value).strip())
+    except ValueError:
+        return min(1, limit)
+    return max(1, min(numeric_value, limit))

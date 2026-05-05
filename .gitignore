@@ -4,6 +4,7 @@ __pycache__/
 .pytest_cache/
 pytest-cache-files-*/
 tmp_pytest/
+tests/_work/
 *.bak
 .idea/
 .mypy_cache/

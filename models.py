@@ -11,6 +11,7 @@ class ModelForm:
     llama_server_path: str = ""
     model_path: str = ""
     context_length: str = ""
+    context_length_max: int | None = None
     gpu_offload_layers: str = ""
     cpu_threads: str = ""
     eval_batch_size: str = ""
@@ -64,6 +65,7 @@ class GgufImportSuggestion:
     name: str
     model_path: str
     context_length: str = ""
+    context_length_max: int | None = None
     gpu_offload_layers: str = ""
     cpu_threads: str = ""
     eval_batch_size: str = ""
