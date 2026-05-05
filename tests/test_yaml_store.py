@@ -42,6 +42,29 @@ models:
     assert "/new.gguf" in dumped
 
 
+def test_model_service_writes_cmd_as_multiline_literal_scalar():
+    store = YamlConfigStore()
+    model_service = ModelConfigService()
+    data = store.parse_raw("models: {}\n")
+    form = ModelForm(
+        model_id="sample",
+        llama_server_path="llama-server",
+        model_path="/models/sample.gguf",
+        context_length="4096",
+        custom_args="-lcd sample_cache.bin",
+    )
+
+    model_service.apply_model_form(data, None, form)
+    dumped = store.dump_to_string(data)
+
+    assert "cmd: |-" in dumped or "cmd: |\n" in dumped
+    assert "      llama-server\n" in dumped
+    assert "      --model /models/sample.gguf\n" in dumped
+    assert "      --port ${PORT}\n" in dumped
+    assert "      --ctx-size 4096\n" in dumped
+    assert "      -lcd sample_cache.bin\n" in dumped
+
+
 def test_save_creates_backup_and_replaces_file():
     tmp_path = work_dir()
     config = tmp_path / "config.yaml"

@@ -10,6 +10,7 @@ class ModelForm:
     model_id: str
     llama_server_path: str = ""
     model_path: str = ""
+    mmproj_path: str = ""
     context_length: str = ""
     context_length_max: int | None = None
     gpu_offload_layers: str = ""

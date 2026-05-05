@@ -1,4 +1,4 @@
-from command_builder import build_command, parse_command
+from command_builder import build_command, format_command_for_yaml, parse_command
 from models import ModelForm
 
 
@@ -21,6 +21,19 @@ def test_build_command_keeps_port_and_omits_empty_values():
     assert cmd.endswith("--verbose")
 
 
+def test_build_command_includes_mmproj_when_present():
+    form = ModelForm(
+        model_id="m",
+        llama_server_path="llama-server",
+        model_path="D:/Models/model.gguf",
+        mmproj_path="D:/Models/vision projector.gguf",
+    )
+
+    cmd = build_command(form)
+
+    assert '--mmproj "D:/Models/vision projector.gguf"' in cmd
+
+
 def test_parse_command_extracts_known_args_and_keeps_unknown_custom_args():
     form = parse_command(
         "sample",
@@ -35,11 +48,32 @@ def test_parse_command_extracts_known_args_and_keeps_unknown_custom_args():
     assert "--foo bar" in form.custom_args
 
 
+def test_parse_command_extracts_mmproj_long_option():
+    form = parse_command(
+        "sample",
+        'llama-server --model D:/Models/model.gguf --mmproj "D:/Models/mmproj.gguf"',
+    )
+
+    assert form.model_path == "D:/Models/model.gguf"
+    assert form.mmproj_path == "D:/Models/mmproj.gguf"
+
+
+def test_parse_command_extracts_mmproj_short_option():
+    form = parse_command(
+        "sample",
+        'llama-server --model D:/Models/model.gguf -mm "D:/Models/mmproj.gguf"',
+    )
+
+    assert form.model_path == "D:/Models/model.gguf"
+    assert form.mmproj_path == "D:/Models/mmproj.gguf"
+
+
 def test_build_command_adds_optional_values_in_order():
     form = ModelForm(
         model_id="m",
         llama_server_path="llama-server",
         model_path="/models/a.gguf",
+        mmproj_path="/models/mmproj.gguf",
         context_length="2048",
         gpu_offload_layers="0",
         cpu_threads="8",
@@ -51,6 +85,23 @@ def test_build_command_adds_optional_values_in_order():
 
     assert build_command(form) == (
         "llama-server --model /models/a.gguf --port ${PORT} "
+        "--mmproj /models/mmproj.gguf "
         "--ctx-size 2048 --n-gpu-layers 0 --threads 8 --batch-size 512 "
         "--seed 42 --cache-type-k q8_0 --cache-type-v q8_0"
+    )
+
+
+def test_format_command_for_yaml_puts_options_on_separate_lines():
+    command = (
+        'llama-server --model "D:/Models/My Model.gguf" --port ${PORT} '
+        "--ctx-size 4096 -lcd sample_cache.bin --verbose"
+    )
+
+    assert format_command_for_yaml(command) == (
+        "llama-server\n"
+        '--model "D:/Models/My Model.gguf"\n'
+        "--port ${PORT}\n"
+        "--ctx-size 4096\n"
+        "-lcd sample_cache.bin\n"
+        "--verbose"
     )

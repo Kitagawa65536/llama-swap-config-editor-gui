@@ -3,8 +3,9 @@ from __future__ import annotations
 from typing import Any
 
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
+from ruamel.yaml.scalarstring import LiteralScalarString
 
-from command_builder import build_command, update_form_from_mapping
+from command_builder import build_command, format_command_for_yaml, update_form_from_mapping
 from models import AdvancedSection, GlobalSettingsForm, ModelForm, ModelListItem
 from yaml_store import YamlConfigStore, YamlStoreError
 
@@ -55,7 +56,7 @@ class ModelConfigService:
         if not isinstance(model, CommentedMap):
             model = CommentedMap(model)
             models[model_id] = model
-        model["cmd"] = build_command(form)
+        model["cmd"] = LiteralScalarString(format_command_for_yaml(build_command(form)))
         if form.ttl.strip():
             model["ttl"] = _coerce_scalar(form.ttl)
         elif "ttl" in model:

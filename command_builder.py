@@ -11,6 +11,8 @@ from models import ModelForm
 VALUE_OPTIONS = {
     "--model": "model_path",
     "-m": "model_path",
+    "--mmproj": "mmproj_path",
+    "-mm": "mmproj_path",
     "--ctx-size": "context_length",
     "-c": "context_length",
     "--n-gpu-layers": "gpu_offload_layers",
@@ -59,6 +61,7 @@ def build_command(form: ModelForm) -> str:
         "${PORT}",
     ]
     option_map = [
+        ("--mmproj", form.mmproj_path),
         ("--ctx-size", form.context_length),
         ("--n-gpu-layers", form.gpu_offload_layers),
         ("--threads", form.cpu_threads),
@@ -76,6 +79,24 @@ def build_command(form: ModelForm) -> str:
     if custom:
         args.append(custom)
     return " ".join(args)
+
+
+def format_command_for_yaml(command: str) -> str:
+    tokens = split_command(command)
+    if not tokens:
+        return ""
+
+    lines = [tokens[0]]
+    i = 1
+    while i < len(tokens):
+        token = tokens[i]
+        if _is_option_token(token) and i + 1 < len(tokens) and not _is_option_token(tokens[i + 1]):
+            lines.append(f"{token} {tokens[i + 1]}")
+            i += 2
+            continue
+        lines.append(token)
+        i += 1
+    return "\n".join(lines)
 
 
 def parse_command(model_id: str, command: str) -> ModelForm:
@@ -99,6 +120,10 @@ def parse_command(model_id: str, command: str) -> ModelForm:
         i += 1
     form.custom_args = " ".join(custom)
     return form
+
+
+def _is_option_token(token: str) -> bool:
+    return token.startswith("-")
 
 
 def update_form_from_mapping(model_id: str, mapping: dict) -> ModelForm:

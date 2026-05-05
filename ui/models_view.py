@@ -102,6 +102,16 @@ def _model_form(app) -> ft.Control:
                 ),
                 ft.Row(
                     controls=[
+                        _field("mmproj path", f.mmproj_path, set_attr("mmproj_path"), expand=True),
+                        ft.IconButton(
+                            icon=ft.Icons.FOLDER_OPEN,
+                            tooltip="Browse mmproj GGUF",
+                            on_click=lambda _e: app.page.run_task(app.pick_mmproj_path),
+                        ),
+                    ]
+                ),
+                ft.Row(
+                    controls=[
                         _context_length_control(f),
                         _field("GPU offload layers", f.gpu_offload_layers, set_attr("gpu_offload_layers")),
                     ]

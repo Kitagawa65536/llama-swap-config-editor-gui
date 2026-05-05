@@ -54,6 +54,7 @@ class LlamaSwapConfigEditor:
         self.gguf_picker = ft.FilePicker()
         self.llama_server_picker = ft.FilePicker()
         self.model_path_picker = ft.FilePicker()
+        self.mmproj_path_picker = ft.FilePicker()
         self.page.services.extend(
             [
                 self.config_picker,
@@ -61,6 +62,7 @@ class LlamaSwapConfigEditor:
                 self.gguf_picker,
                 self.llama_server_picker,
                 self.model_path_picker,
+                self.mmproj_path_picker,
             ]
         )
 
@@ -164,6 +166,10 @@ class LlamaSwapConfigEditor:
         files = await self.model_path_picker.pick_files(allow_multiple=False, allowed_extensions=["gguf"])
         self.handle_model_path_file(files)
 
+    async def pick_mmproj_path(self, _event=None) -> None:
+        files = await self.mmproj_path_picker.pick_files(allow_multiple=False, allowed_extensions=["gguf"])
+        self.handle_mmproj_path_file(files)
+
     def handle_config_files(self, files: list[ft.FilePickerFile] | None) -> None:
         if files and files[0].path:
             self.open_config(files[0].path)
@@ -217,6 +223,11 @@ class LlamaSwapConfigEditor:
     def handle_model_path_file(self, files: list[ft.FilePickerFile] | None) -> None:
         if files and files[0].path and self.current_model_form:
             self.current_model_form.model_path = files[0].path
+            self.refresh()
+
+    def handle_mmproj_path_file(self, files: list[ft.FilePickerFile] | None) -> None:
+        if files and files[0].path and self.current_model_form:
+            self.current_model_form.mmproj_path = files[0].path
             self.refresh()
 
     def open_config(self, path: str) -> None:
@@ -365,6 +376,13 @@ class LlamaSwapConfigEditor:
                 self.state.last_message = f"YAML構文エラーのため保存不可 / YAML error: {exc}"
                 self.refresh()
                 return
+        else:
+            try:
+                self.apply_pending_form_edits_for_save()
+            except Exception as exc:
+                self.state.last_message = f"フォーム反映失敗のため保存不可 / Apply form failed: {exc}"
+                self.refresh()
+                return
         try:
             ok, message, _backup = self.store.save(self.state.path, self.state.data, self.validator)
             self.state.last_message = message
@@ -378,6 +396,16 @@ class LlamaSwapConfigEditor:
         except Exception as exc:
             self.state.last_message = f"保存失敗 / Save failed: {exc}"
             self.refresh()
+
+    def apply_pending_form_edits_for_save(self) -> None:
+        if self.state.data is None or self.current_model_form is None:
+            return
+        original = self.selected_model_id
+        self.model_service.apply_model_form(self.state.data, original, self.current_model_form)
+        self.selected_model_id = self.current_model_form.model_id
+        self.state.raw_yaml = self.store.dump_to_string(self.state.data)
+        self.raw_editor = None
+        self.state.dirty = True
 
     def unique_model_id(self, base: str) -> str:
         existing = set()
