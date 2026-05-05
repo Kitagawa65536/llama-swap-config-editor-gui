@@ -75,10 +75,24 @@ def _model_form(app) -> ft.Control:
                 ft.Text("モデル編集 / Model editor", size=22, weight=ft.FontWeight.BOLD),
                 _field("model_id", f.model_id, set_attr("model_id")),
                 _field("name", f.name, set_attr("name")),
-                _field("llama-server path", f.llama_server_path, set_attr("llama_server_path")),
+                ft.Row(
+                    controls=[
+                        _field("llama-server path", f.llama_server_path, set_attr("llama_server_path"), expand=True),
+                        ft.IconButton(
+                            icon=ft.Icons.FOLDER_OPEN,
+                            tooltip="Browse llama-server",
+                            on_click=lambda _e: app.page.run_task(app.pick_llama_server),
+                        ),
+                    ]
+                ),
                 ft.Row(
                     controls=[
                         _field("GGUF model path", f.model_path, set_attr("model_path"), expand=True),
+                        ft.IconButton(
+                            icon=ft.Icons.FOLDER_OPEN,
+                            tooltip="Browse GGUF",
+                            on_click=lambda _e: app.page.run_task(app.pick_model_path),
+                        ),
                         ft.OutlinedButton(
                             "GGUFヘッダ読込 / Read GGUF header",
                             icon=ft.Icons.DATA_OBJECT,

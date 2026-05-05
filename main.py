@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import platform
 from pathlib import Path
 
 import flet as ft
@@ -51,7 +52,17 @@ class LlamaSwapConfigEditor:
         self.config_picker = ft.FilePicker()
         self.schema_picker = ft.FilePicker()
         self.gguf_picker = ft.FilePicker()
-        self.page.services.extend([self.config_picker, self.schema_picker, self.gguf_picker])
+        self.llama_server_picker = ft.FilePicker()
+        self.model_path_picker = ft.FilePicker()
+        self.page.services.extend(
+            [
+                self.config_picker,
+                self.schema_picker,
+                self.gguf_picker,
+                self.llama_server_picker,
+                self.model_path_picker,
+            ]
+        )
 
         self.page.on_route_change = self.route_change
         self.page.on_view_pop = self.view_pop
@@ -144,6 +155,15 @@ class LlamaSwapConfigEditor:
         files = await self.gguf_picker.pick_files(allow_multiple=True, allowed_extensions=["gguf"])
         self.handle_gguf_files(files)
 
+    async def pick_llama_server(self, _event=None) -> None:
+        allowed_extensions = ["exe"] if platform.system() == "Windows" else None
+        files = await self.llama_server_picker.pick_files(allow_multiple=False, allowed_extensions=allowed_extensions)
+        self.handle_llama_server_file(files)
+
+    async def pick_model_path(self, _event=None) -> None:
+        files = await self.model_path_picker.pick_files(allow_multiple=False, allowed_extensions=["gguf"])
+        self.handle_model_path_file(files)
+
     def handle_config_files(self, files: list[ft.FilePickerFile] | None) -> None:
         if files and files[0].path:
             self.open_config(files[0].path)
@@ -188,6 +208,16 @@ class LlamaSwapConfigEditor:
             self.current_model_form = form
         self.mark_dirty(f"{len(suggestions)}件のGGUFを追加しました / GGUF model(s) added")
         self.navigate("/models")
+
+    def handle_llama_server_file(self, files: list[ft.FilePickerFile] | None) -> None:
+        if files and files[0].path and self.current_model_form:
+            self.current_model_form.llama_server_path = files[0].path
+            self.refresh()
+
+    def handle_model_path_file(self, files: list[ft.FilePickerFile] | None) -> None:
+        if files and files[0].path and self.current_model_form:
+            self.current_model_form.model_path = files[0].path
+            self.refresh()
 
     def open_config(self, path: str) -> None:
         try:
