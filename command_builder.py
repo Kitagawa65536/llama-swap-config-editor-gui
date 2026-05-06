@@ -6,6 +6,7 @@ from dataclasses import asdict
 from typing import Iterable
 
 from models import ModelForm
+from runtime_profiles import DEFAULT_RUNTIME_ID, normalize_runtime_id, runtime_profile
 
 KNOWN_CACHE_QUANT_TYPES = (
     "f32",
@@ -85,8 +86,16 @@ def _clean_token(token: str) -> str:
 
 
 def build_command(form: ModelForm) -> str:
+    runtime_id = normalize_runtime_id(form.runtime_id)
+    if runtime_id == DEFAULT_RUNTIME_ID:
+        return _build_llama_cpp_command(form)
+    return _build_llama_cpp_command(form)
+
+
+def _build_llama_cpp_command(form: ModelForm) -> str:
+    profile = runtime_profile(form.runtime_id)
     args = [
-        quote_arg(form.llama_server_path.strip() or "llama-server"),
+        quote_arg(form.llama_server_path.strip() or profile.default_command),
         "--model",
         quote_arg(form.model_path.strip()),
         "--port",
@@ -147,9 +156,9 @@ def format_command_for_yaml(command: str) -> str:
     return "\n".join(lines)
 
 
-def parse_command(model_id: str, command: str) -> ModelForm:
+def parse_command(model_id: str, command: str, runtime_id: str = DEFAULT_RUNTIME_ID) -> ModelForm:
     tokens = [_clean_token(token) for token in split_command(command)]
-    form = ModelForm(model_id=model_id)
+    form = ModelForm(model_id=model_id, runtime_id=normalize_runtime_id(runtime_id))
     if tokens:
         form.llama_server_path = tokens[0]
 
@@ -235,8 +244,8 @@ def _is_expert_used_count_override(entry: str) -> bool:
     return key.endswith(EXPERT_USED_COUNT_SUFFIX) and type_name == "int"
 
 
-def update_form_from_mapping(model_id: str, mapping: dict) -> ModelForm:
-    form = parse_command(model_id, str(mapping.get("cmd", "") or ""))
+def update_form_from_mapping(model_id: str, mapping: dict, runtime_id: str = DEFAULT_RUNTIME_ID) -> ModelForm:
+    form = parse_command(model_id, str(mapping.get("cmd", "") or ""), runtime_id=runtime_id)
     form.ttl = "" if mapping.get("ttl") is None else str(mapping.get("ttl"))
     aliases = mapping.get("aliases") or []
     if isinstance(aliases, str):

@@ -63,6 +63,57 @@ def test_model_service_writes_cmd_as_multiline_literal_scalar():
     assert "      --port ${PORT}\n" in dumped
     assert "      --ctx-size 4096\n" in dumped
     assert "      -lcd sample_cache.bin\n" in dumped
+    assert "sample: # runtime: llama.cpp\n" in dumped
+
+
+def test_model_service_reads_runtime_from_model_id_comment():
+    store = YamlConfigStore()
+    model_service = ModelConfigService()
+    data = store.parse_raw(
+        """models:
+  sample: # runtime: llama.cpp
+    cmd: llama-server --model /models/sample.gguf --port ${PORT}
+"""
+    )
+
+    form = model_service.model_form_from_mapping("sample", data["models"]["sample"], data["models"])
+
+    assert form.runtime_id == "llama.cpp"
+
+
+def test_model_service_preserves_existing_model_id_eol_comment_when_adding_runtime():
+    store = YamlConfigStore()
+    model_service = ModelConfigService()
+    data = store.parse_raw(
+        """models:
+  sample: # keep this note
+    cmd: llama-server --model /models/sample.gguf --port ${PORT}
+"""
+    )
+    form = model_service.model_form_from_mapping("sample", data["models"]["sample"], data["models"])
+
+    model_service.apply_model_form(data, "sample", form)
+    dumped = store.dump_to_string(data)
+
+    assert "sample: # keep this note; runtime: llama.cpp\n" in dumped
+
+
+def test_model_service_moves_model_id_eol_comment_when_renaming_model():
+    store = YamlConfigStore()
+    model_service = ModelConfigService()
+    data = store.parse_raw(
+        """models:
+  old: # keep this note; runtime: llama.cpp
+    cmd: llama-server --model /models/sample.gguf --port ${PORT}
+"""
+    )
+    form = model_service.model_form_from_mapping("old", data["models"]["old"], data["models"])
+    form.model_id = "new"
+
+    model_service.apply_model_form(data, "old", form)
+    dumped = store.dump_to_string(data)
+
+    assert "new: # keep this note; runtime: llama.cpp\n" in dumped
 
 
 def test_save_creates_backup_and_replaces_file():

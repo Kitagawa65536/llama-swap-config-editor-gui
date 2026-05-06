@@ -3,6 +3,7 @@ from __future__ import annotations
 import flet as ft
 
 from command_builder import KNOWN_CACHE_QUANT_TYPES, SPEC_TYPE_OPTIONS
+from runtime_profiles import RUNTIME_PROFILES, runtime_profile
 
 
 def build_models(app) -> ft.Control:
@@ -67,7 +68,7 @@ def build_model_cards(app) -> list[ft.Control]:
                         ft.Text(item.model_id, weight=ft.FontWeight.BOLD),
                         ft.Text(item.subtitle, size=12),
                         ft.Text(item.model_path, size=11, overflow=ft.TextOverflow.ELLIPSIS),
-                        ft.Text(f"ttl: {item.ttl}", size=11),
+                        ft.Text(f"runtime: {item.runtime_id} / ttl: {item.ttl}", size=11),
                     ],
                 ),
             )
@@ -111,6 +112,7 @@ def _spec_type_dropdown(app, value: str, on_change) -> ft.Dropdown:
 
 def _model_form(app) -> ft.Control:
     f = app.current_model_form
+    profile = runtime_profile(f.runtime_id)
 
     def set_attr(name):
         return lambda e: setattr(f, name, e.control.value)
@@ -121,6 +123,9 @@ def _model_form(app) -> ft.Control:
     def set_kv(e):
         value = e.control.value
         f.kv_cache_gpu_offload = True if value == "on" else False if value == "off" else None
+
+    def set_runtime(e):
+        f.runtime_id = e.control.value
 
     advanced_section = ft.Column(
         visible=False,
@@ -168,19 +173,26 @@ def _model_form(app) -> ft.Control:
                 ft.Text(app.t("models.editor_title"), size=22, weight=ft.FontWeight.BOLD),
                 _field("model_id", f.model_id, set_attr("model_id")),
                 _field("name", f.name, set_attr("name")),
+                ft.Dropdown(
+                    label=app.t("models.runtime"),
+                    value=f.runtime_id,
+                    options=[ft.dropdown.Option(profile.runtime_id, profile.label) for profile in RUNTIME_PROFILES],
+                    on_select=set_runtime,
+                    dense=True,
+                ),
                 ft.Row(
                     controls=[
-                        _field("llama-server path", f.llama_server_path, set_attr("llama_server_path"), expand=True),
+                        _field(app.t(profile.runtime_path_label_key), f.llama_server_path, set_attr("llama_server_path"), expand=True),
                         ft.IconButton(
                             icon=ft.Icons.FOLDER_OPEN,
-                            tooltip="Browse llama-server",
+                            tooltip=app.t("models.runtime_path.browse"),
                             on_click=lambda _e: app.page.run_task(app.pick_llama_server),
                         ),
                     ]
                 ),
                 ft.Row(
                     controls=[
-                        _field("GGUF model path", f.model_path, set_attr("model_path"), expand=True),
+                        _field(app.t(profile.model_path_label_key), f.model_path, set_attr("model_path"), expand=True),
                         ft.IconButton(
                             icon=ft.Icons.FOLDER_OPEN,
                             tooltip="Browse GGUF",

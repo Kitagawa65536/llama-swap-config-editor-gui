@@ -8,6 +8,7 @@ from typing import Any
 @dataclass
 class ModelForm:
     model_id: str
+    runtime_id: str = "llama.cpp"
     llama_server_path: str = ""
     model_path: str = ""
     mmproj_path: str = ""
@@ -42,6 +43,7 @@ class ModelListItem:
     subtitle: str
     model_path: str
     ttl: str
+    runtime_id: str = "llama.cpp"
 
 
 @dataclass

@@ -357,10 +357,11 @@ class LlamaSwapConfigEditor:
     def select_model(self, model_id: str) -> None:
         if self.state.data is None:
             return
+        models = self.state.data.get("models") if isinstance(self.state.data, dict) else None
         for key, mapping in self.model_service.model_items(self.state.data):
             if key == model_id:
                 self.selected_model_id = model_id
-                self.current_model_form = self.model_service.model_form_from_mapping(key, mapping)
+                self.current_model_form = self.model_service.model_form_from_mapping(key, mapping, models)
                 context_limit = self.gguf_context_limits.get(self.gguf_path_key(self.current_model_form.model_path))
                 if context_limit is not None:
                     self.current_model_form.context_length_max = context_limit

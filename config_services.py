@@ -1,16 +1,21 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
+from ruamel.yaml.error import CommentMark
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from ruamel.yaml.scalarstring import LiteralScalarString
+from ruamel.yaml.tokens import CommentToken
 
 from command_builder import build_command, format_command_for_yaml, update_form_from_mapping
 from models import AdvancedSection, GlobalSettingsForm, ModelForm, ModelListItem
+from runtime_profiles import normalize_runtime_id
 from yaml_store import YamlConfigStore, YamlStoreError
 
 
 ADVANCED_SECTION_KEYS = ["macros", "matrix", "groups", "hooks", "peers"]
+RUNTIME_COMMENT_RE = re.compile(r"runtime:\s*([A-Za-z0-9_.+-]+)")
 
 
 class ModelConfigService:
@@ -22,20 +27,22 @@ class ModelConfigService:
 
     def list_items(self, data: Any) -> list[ModelListItem]:
         items: list[ModelListItem] = []
+        models = data.get("models") if isinstance(data, dict) else None
         for model_id, model_data in self.model_items(data):
-            form = self.model_form_from_mapping(model_id, model_data)
+            form = self.model_form_from_mapping(model_id, model_data, models if isinstance(models, CommentedMap) else None)
             items.append(
                 ModelListItem(
                     model_id=model_id,
                     subtitle=form.name or ", ".join(form.aliases) or "-",
                     model_path=form.model_path or "(model path unknown)",
                     ttl=form.ttl or "-",
+                    runtime_id=form.runtime_id,
                 )
             )
         return items
 
-    def model_form_from_mapping(self, model_id: str, mapping: dict) -> ModelForm:
-        return update_form_from_mapping(model_id, mapping)
+    def model_form_from_mapping(self, model_id: str, mapping: dict, parent: CommentedMap | None = None) -> ModelForm:
+        return update_form_from_mapping(model_id, mapping, runtime_id=normalize_runtime_id(_runtime_comment_for_model(model_id, parent)))
 
     def apply_model_form(self, data: Any, original_model_id: str | None, form: ModelForm) -> None:
         models = data.setdefault("models", CommentedMap())
@@ -44,10 +51,13 @@ class ModelConfigService:
         model_id = form.model_id.strip()
         if not model_id:
             raise YamlStoreError("model_id is required")
+        transferred_comment = ""
         if original_model_id and original_model_id != model_id:
             if model_id in models:
                 raise YamlStoreError(f"model_id already exists: {model_id}")
+            transferred_comment = _eol_comment_text(models, original_model_id)
             existing = models.pop(original_model_id, None)
+            _remove_model_runtime_comment(models, original_model_id)
             models[model_id] = existing if isinstance(existing, CommentedMap) else CommentedMap()
         elif model_id not in models:
             models[model_id] = CommentedMap()
@@ -56,6 +66,7 @@ class ModelConfigService:
         if not isinstance(model, CommentedMap):
             model = CommentedMap(model)
             models[model_id] = model
+        _set_model_runtime_comment(models, model_id, form.runtime_id, existing_comment=transferred_comment)
         model["cmd"] = LiteralScalarString(format_command_for_yaml(build_command(form)))
         if form.ttl.strip():
             model["ttl"] = _coerce_scalar(form.ttl)
@@ -140,3 +151,47 @@ def _coerce_scalar(value: str) -> Any:
         return int(stripped)
     except ValueError:
         return stripped
+
+
+def _runtime_comment_for_model(model_id: str, parent: CommentedMap | None) -> str:
+    if isinstance(parent, CommentedMap):
+        return _runtime_comment_from_key(parent, model_id)
+    return ""
+
+
+def _runtime_comment_from_key(mapping: CommentedMap, key: str) -> str:
+    comment = _eol_comment_text(mapping, key)
+    match = RUNTIME_COMMENT_RE.search(comment)
+    return match.group(1) if match else ""
+
+
+def _set_model_runtime_comment(
+    mapping: CommentedMap,
+    key: str,
+    runtime_id: str,
+    existing_comment: str = "",
+) -> None:
+    runtime_id = normalize_runtime_id(runtime_id)
+    existing = existing_comment or _eol_comment_text(mapping, key)
+    marker = f"runtime: {runtime_id}"
+    if RUNTIME_COMMENT_RE.search(existing):
+        comment = RUNTIME_COMMENT_RE.sub(marker, existing)
+    elif existing:
+        comment = f"{existing.rstrip()}; {marker}"
+    else:
+        comment = marker
+    item = mapping.ca.items.setdefault(key, [None, None, None, None])
+    item[2] = CommentToken(f"# {comment}", CommentMark(0), None)
+
+
+def _remove_model_runtime_comment(mapping: CommentedMap, key: str) -> None:
+    if key in mapping.ca.items:
+        del mapping.ca.items[key]
+
+
+def _eol_comment_text(mapping: CommentedMap, key: str) -> str:
+    item = mapping.ca.items.get(key)
+    if not item or len(item) < 3 or item[2] is None:
+        return ""
+    value = getattr(item[2], "value", "")
+    return str(value).strip().removeprefix("#").strip()

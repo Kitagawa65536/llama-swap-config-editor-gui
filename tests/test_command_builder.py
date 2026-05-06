@@ -21,6 +21,12 @@ def test_build_command_keeps_port_and_omits_empty_values():
     assert cmd.endswith("--verbose")
 
 
+def test_parse_command_defaults_to_llama_cpp_runtime():
+    form = parse_command("sample", "llama-server --model D:/Models/model.gguf")
+
+    assert form.runtime_id == "llama.cpp"
+
+
 def test_build_command_includes_mmproj_when_present():
     form = ModelForm(
         model_id="m",
