@@ -8,7 +8,7 @@ from platformdirs import user_config_dir
 
 
 APP_NAME = "llama-swap-config-editor"
-APP_AUTHOR = "oss"
+APP_AUTHOR = "config"
 
 
 @dataclass
