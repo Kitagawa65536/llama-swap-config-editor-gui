@@ -7,6 +7,22 @@ from typing import Iterable
 
 from models import ModelForm
 
+KNOWN_CACHE_QUANT_TYPES = (
+    "f32",
+    "f16",
+    "bf16",
+    "q8_0",
+    "q4_0",
+    "q4_1",
+    "iq4_nl",
+    "q5_0",
+    "q5_1",
+)
+
+CACHE_TYPE_OPTIONS = {
+    "--cache-type-k": "k_cache_quant_type",
+    "--cache-type-v": "v_cache_quant_type",
+}
 
 VALUE_OPTIONS = {
     "--model": "model_path",
@@ -22,8 +38,6 @@ VALUE_OPTIONS = {
     "--batch-size": "eval_batch_size",
     "-b": "eval_batch_size",
     "--seed": "seed",
-    "--cache-type-k": "k_cache_quant_type",
-    "--cache-type-v": "v_cache_quant_type",
 }
 
 IGNORED_VALUE_OPTIONS = {"--port"}
@@ -109,6 +123,14 @@ def parse_command(model_id: str, command: str) -> ModelForm:
     i = 1
     while i < len(tokens):
         token = tokens[i]
+        if token in CACHE_TYPE_OPTIONS and i + 1 < len(tokens):
+            value = tokens[i + 1]
+            if value in KNOWN_CACHE_QUANT_TYPES:
+                setattr(form, CACHE_TYPE_OPTIONS[token], value)
+            else:
+                custom.extend([token, quote_arg(value) if re.search(r"\s", value) else value])
+            i += 2
+            continue
         if token in VALUE_OPTIONS and i + 1 < len(tokens):
             setattr(form, VALUE_OPTIONS[token], tokens[i + 1])
             i += 2

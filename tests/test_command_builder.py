@@ -91,6 +91,55 @@ def test_build_command_adds_optional_values_in_order():
     )
 
 
+def test_parse_command_extracts_known_cache_types_without_custom_args():
+    form = parse_command(
+        "sample",
+        "llama-server --model D:/Models/model.gguf --cache-type-k q8_0 --cache-type-v f16",
+    )
+
+    assert form.k_cache_quant_type == "q8_0"
+    assert form.v_cache_quant_type == "f16"
+    assert "--cache-type-k" not in form.custom_args
+    assert "--cache-type-v" not in form.custom_args
+
+
+def test_parse_command_keeps_unknown_cache_types_in_custom_args():
+    form = parse_command(
+        "sample",
+        "llama-server --model D:/Models/model.gguf --cache-type-k q6_k --cache-type-v q4_2",
+    )
+
+    assert form.k_cache_quant_type == ""
+    assert form.v_cache_quant_type == ""
+    assert "--cache-type-k q6_k" in form.custom_args
+    assert "--cache-type-v q4_2" in form.custom_args
+
+
+def test_parse_command_supports_mixed_known_and_unknown_cache_types():
+    form = parse_command(
+        "sample",
+        "llama-server --model D:/Models/model.gguf --cache-type-k q8_0 --cache-type-v q4_2",
+    )
+
+    assert form.k_cache_quant_type == "q8_0"
+    assert form.v_cache_quant_type == ""
+    assert "--cache-type-k" not in form.custom_args
+    assert "--cache-type-v q4_2" in form.custom_args
+
+
+def test_build_command_round_trips_unknown_cache_types_via_custom_args():
+    form = parse_command(
+        "sample",
+        "llama-server --model D:/Models/model.gguf --cache-type-k q6_k --threads 8",
+    )
+
+    rebuilt = build_command(form)
+
+    assert "--cache-type-k q6_k" in rebuilt
+    assert "--threads 8" in rebuilt
+    assert form.k_cache_quant_type == ""
+
+
 def test_format_command_for_yaml_puts_options_on_separate_lines():
     command = (
         'llama-server --model "D:/Models/My Model.gguf" --port ${PORT} '

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import flet as ft
 
+from command_builder import KNOWN_CACHE_QUANT_TYPES
+
 
 def build_models(app) -> ft.Control:
     items = app.model_list_items()
@@ -50,6 +52,19 @@ def build_models(app) -> ft.Control:
 
 def _field(label: str, value: str, on_change, password: bool = False, expand: bool | int | None = None) -> ft.TextField:
     return ft.TextField(label=label, value=value, on_change=on_change, password=password, dense=True, expand=expand)
+
+
+def _cache_dropdown(label: str, value: str, on_change) -> ft.Dropdown:
+    return ft.Dropdown(
+        label=label,
+        value=value or "",
+        options=[
+            ft.dropdown.Option("", "未指定 / Clear"),
+            *[ft.dropdown.Option(option, option) for option in KNOWN_CACHE_QUANT_TYPES],
+        ],
+        on_select=on_change,
+        expand=True,
+    )
 
 
 def _model_form(app) -> ft.Control:
@@ -140,8 +155,8 @@ def _model_form(app) -> ft.Control:
                 ),
                 ft.Row(
                     controls=[
-                        _field("K cache quantization type", f.k_cache_quant_type, set_attr("k_cache_quant_type")),
-                        _field("V cache quantization type", f.v_cache_quant_type, set_attr("v_cache_quant_type")),
+                        _cache_dropdown("K cache type", f.k_cache_quant_type, set_attr("k_cache_quant_type")),
+                        _cache_dropdown("V cache type", f.v_cache_quant_type, set_attr("v_cache_quant_type")),
                     ]
                 ),
                 _field("ttl", f.ttl, set_attr("ttl")),
