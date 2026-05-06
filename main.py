@@ -59,6 +59,7 @@ class LlamaSwapConfigEditor:
         self.raw_editor: ft.TextField | None = None
 
         self.config_picker = ft.FilePicker()
+        self.new_config_picker = ft.FilePicker()
         self.schema_picker = ft.FilePicker()
         self.gguf_picker = ft.FilePicker()
         self.llama_server_picker = ft.FilePicker()
@@ -67,6 +68,7 @@ class LlamaSwapConfigEditor:
         self.page.services.extend(
             [
                 self.config_picker,
+                self.new_config_picker,
                 self.schema_picker,
                 self.gguf_picker,
                 self.llama_server_picker,
@@ -182,6 +184,41 @@ class LlamaSwapConfigEditor:
         files = await self.config_picker.pick_files(allow_multiple=False, allowed_extensions=["yaml", "yml"])
         self.handle_config_files(files)
 
+    def create_new_config(self, _event=None) -> None:
+        if self.state.dirty:
+            dialog = ft.AlertDialog(
+                modal=True,
+                title=ft.Text(self.t("dialog.new_config.title")),
+                content=ft.Text(self.t("dialog.new_config.content")),
+                actions=[
+                    ft.TextButton(self.t("dialog.cancel"), on_click=self.close_dialog),
+                    ft.TextButton(self.t("dialog.discard"), on_click=self.confirm_create_new_config),
+                ],
+                actions_alignment=ft.MainAxisAlignment.END,
+            )
+            self._active_dialog = dialog
+            self.page.show_dialog(dialog)
+            return
+        self.page.run_task(self.pick_new_config_path)
+
+    def confirm_create_new_config(self, _event=None) -> None:
+        self.close_dialog()
+        self.page.run_task(self.pick_new_config_path)
+
+    async def pick_new_config_path(self) -> None:
+        path = await self.new_config_picker.save_file(
+            dialog_title=self.t("dialog.new_config.title"),
+            file_name="config.yaml",
+            initial_directory=self.initial_config_directory(),
+            file_type=ft.FilePickerFileType.CUSTOM,
+            allowed_extensions=["yaml", "yml"],
+        )
+        if not path:
+            self.state.last_message = self.t("message.config_create_cancelled")
+            self.refresh()
+            return
+        self.create_config_at_path(path)
+
     async def pick_schema(self, _event=None) -> None:
         files = await self.schema_picker.pick_files(allow_multiple=False, allowed_extensions=["json"])
         self.handle_schema_files(files)
@@ -206,6 +243,43 @@ class LlamaSwapConfigEditor:
     def handle_config_files(self, files: list[ft.FilePickerFile] | None) -> None:
         if files and files[0].path:
             self.open_config(files[0].path)
+
+    def create_config_at_path(self, path: str | Path) -> None:
+        config_path = Path(path)
+        data = self.store.new_config()
+        try:
+            ok, message, backup = self.store.save(config_path, data, self.validator)
+            if not ok:
+                self.state.last_message = message
+                self.refresh()
+                return
+            self.state.path = config_path
+            self.state.data = data
+            self.state.raw_yaml = self.store.dump_to_string(data)
+            self.state.dirty = False
+            self.selected_model_id = None
+            self.current_model_form = None
+            self.global_form = self.global_settings_service.global_settings_form(data)
+            self.raw_editor = None
+            self.settings_repo.add_recent_config(self.settings, str(config_path))
+            self.state.last_message = (
+                self.t("message.config_created_with_backup", backup=backup.name)
+                if backup
+                else self.t("message.config_created")
+            )
+            self.validate_config()
+        except Exception as exc:
+            self.state.last_message = self.t("message.config_create_failed", error=exc)
+            self.refresh()
+
+    def initial_config_directory(self) -> str | None:
+        if self.state.path:
+            return str(self.state.path.parent)
+        for recent in self.settings.recent_configs:
+            parent = Path(recent).parent
+            if parent.exists():
+                return str(parent)
+        return None
 
     def handle_schema_files(self, files: list[ft.FilePickerFile] | None) -> None:
         if not files or not files[0].path:

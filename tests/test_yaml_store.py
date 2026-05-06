@@ -85,6 +85,21 @@ def test_save_creates_backup_and_replaces_file():
     assert "added:" in config.read_text(encoding="utf-8")
 
 
+def test_save_new_file_does_not_create_backup():
+    tmp_path = work_dir()
+    config = tmp_path / "config.yaml"
+    store = YamlConfigStore()
+    data = store.new_config()
+
+    ok, message, backup = store.save(config, data)
+
+    assert ok
+    assert message == "Saved."
+    assert backup is None
+    assert not (tmp_path / "config_backup").exists()
+    assert "models: {}\n" in config.read_text(encoding="utf-8")
+
+
 def test_save_uses_timestamped_backup_name_inside_backup_directory_when_simple_name_exists():
     tmp_path = work_dir()
     config = tmp_path / "config.yaml"
@@ -124,6 +139,25 @@ def test_validation_failure_does_not_modify_file():
     assert "requiredKey" in message
     assert backup is None
     assert config.read_text(encoding="utf-8") == "models: {}\n"
+
+
+def test_validation_failure_does_not_create_new_file():
+    tmp_path = work_dir()
+    config = tmp_path / "config.yaml"
+    schema = tmp_path / "schema.json"
+    schema.write_text(
+        '{"type":"object","required":["requiredKey"],"properties":{"requiredKey":{"type":"string"}}}',
+        encoding="utf-8",
+    )
+    store = YamlConfigStore()
+    validator = ConfigSchemaValidator(schema)
+
+    ok, message, backup = store.save(config, store.new_config(), validator)
+
+    assert not ok
+    assert "requiredKey" in message
+    assert backup is None
+    assert not config.exists()
 
 
 def test_parse_raw_rejects_invalid_yaml_without_touching_existing_state():

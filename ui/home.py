@@ -19,6 +19,7 @@ def build_home(app) -> ft.Control:
             ft.Row(
                 wrap=True,
                 controls=[
+                    ft.Button(app.t("home.new_config"), on_click=app.create_new_config),
                     ft.Button(app.t("home.open_config"), on_click=app.pick_config),
                     # Bundled demo schema support is deferred; users currently select an external config-schema.json.
                     ft.OutlinedButton(app.t("home.select_schema"), on_click=app.pick_schema),

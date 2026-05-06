@@ -28,6 +28,16 @@ class YamlConfigStore:
     def __init__(self) -> None:
         self.yaml = make_yaml()
 
+    def new_config(self) -> CommentedMap:
+        data = CommentedMap()
+        data["healthCheckTimeout"] = 30
+        data["logLevel"] = "info"
+        data["startPort"] = 8080
+        data["globalTTL"] = 600
+        data["sendLoadingState"] = True
+        data["models"] = CommentedMap()
+        return data
+
     def load(self, path: str | Path) -> tuple[Any, str]:
         config_path = Path(path)
         text = config_path.read_text(encoding="utf-8")
@@ -58,10 +68,10 @@ class YamlConfigStore:
             return False, message, None
 
         config_path = Path(path)
-        backup_path = self._backup_path(config_path)
+        backup_path = self._backup_path(config_path) if config_path.exists() else None
         tmp_path = config_path.with_name(config_path.name + ".tmp")
         try:
-            if config_path.exists():
+            if backup_path is not None:
                 backup_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(config_path, backup_path)
             with tmp_path.open("w", encoding="utf-8", newline="\n") as file:
@@ -70,7 +80,8 @@ class YamlConfigStore:
         finally:
             if tmp_path.exists():
                 tmp_path.unlink(missing_ok=True)
-        return True, f"Saved. Backup: {backup_path.name}", backup_path
+        message = f"Saved. Backup: {backup_path.name}" if backup_path else "Saved."
+        return True, message, backup_path
 
     def _backup_path(self, config_path: Path) -> Path:
         backup_dir = config_path.parent / "config_backup"
