@@ -106,6 +106,89 @@ def test_parse_command_extracts_ubatch_size_long_and_short_options():
     assert short_form.ubatch_size == "128"
 
 
+def test_build_command_merges_expert_used_count_with_existing_override_kv():
+    form = ModelForm(
+        model_id="m",
+        llama_server_path="llama-server",
+        model_path="/models/a.gguf",
+        override_kv="llama.rope.freq_base=float:1000000",
+        expert_used_count_key="qwen3moe.expert_used_count",
+        expert_used_count="8",
+    )
+
+    cmd = build_command(form)
+
+    assert "--override-kv llama.rope.freq_base=float:1000000,qwen3moe.expert_used_count=int:8" in cmd
+
+
+def test_parse_command_extracts_expert_used_count_and_preserves_other_override_kv():
+    form = parse_command(
+        "sample",
+        (
+            "llama-server --model D:/Models/model.gguf "
+            "--override-kv llama.rope.freq_base=float:1000000,qwen3moe.expert_used_count=int:6"
+        ),
+    )
+
+    assert form.override_kv == "llama.rope.freq_base=float:1000000"
+    assert form.expert_used_count_key == "qwen3moe.expert_used_count"
+    assert form.expert_used_count == "6"
+
+
+def test_build_command_adds_ngram_speculative_decoding_options():
+    form = ModelForm(
+        model_id="m",
+        llama_server_path="llama-server",
+        model_path="/models/a.gguf",
+        spec_type="ngram-map-k4v",
+        spec_ngram_size_n="24",
+        draft_min="48",
+        draft_max="64",
+    )
+
+    assert build_command(form) == (
+        "llama-server --model /models/a.gguf --port ${PORT} "
+        "--spec-type ngram-map-k4v --spec-ngram-size-n 24 --draft-min 48 --draft-max 64"
+    )
+
+
+def test_parse_command_extracts_ngram_speculative_decoding_options():
+    form = parse_command(
+        "sample",
+        (
+            "llama-server --model D:/Models/model.gguf --spec-type ngram-mod "
+            "--spec-ngram-size-n 24 --draft-min 48 --draft-max 64"
+        ),
+    )
+
+    assert form.spec_type == "ngram-mod"
+    assert form.spec_ngram_size_n == "24"
+    assert form.draft_min == "48"
+    assert form.draft_max == "64"
+    assert "--spec-type" not in form.custom_args
+
+
+def test_build_command_can_emit_spec_type_none():
+    form = ModelForm(
+        model_id="m",
+        llama_server_path="llama-server",
+        model_path="/models/a.gguf",
+        spec_type="none",
+    )
+
+    assert build_command(form) == "llama-server --model /models/a.gguf --port ${PORT} --spec-type none"
+
+
+def test_parse_command_accepts_draft_option_aliases_from_help():
+    form = parse_command(
+        "sample",
+        "llama-server --model D:/Models/model.gguf --draft 64 --draft-n-min 48",
+    )
+
+    assert form.draft_max == "64"
+    assert form.draft_min == "48"
+
+
 def test_parse_command_extracts_known_cache_types_without_custom_args():
     form = parse_command(
         "sample",

@@ -9,7 +9,7 @@ from ruamel.yaml.comments import CommentedMap
 
 from app_settings import AppSettingsRepository
 from config_services import AdvancedConfigService, GlobalSettingsService, ModelConfigService
-from gguf_importer import import_gguf, import_many
+from gguf_importer import expert_used_count_metadata, format_metadata_text, import_gguf, import_many
 from models import AdvancedSection, ConfigState, GlobalSettingsForm, ModelForm, ModelListItem
 from schema_validator import ConfigSchemaValidator
 from ui.advanced import build_advanced
@@ -51,6 +51,7 @@ class LlamaSwapConfigEditor:
         self._active_dialog: ft.AlertDialog | None = None
         self.current_model_form: ModelForm | None = None
         self.gguf_context_limits: dict[str, int] = {}
+        self.gguf_metadata_by_path: dict[str, dict] = {}
         self.global_form = GlobalSettingsForm()
         self.raw_editor: ft.TextField | None = None
 
@@ -212,8 +213,7 @@ class LlamaSwapConfigEditor:
                 context_length_max=suggestion.context_length_max,
                 gpu_offload_layers=suggestion.gpu_offload_layers,
             )
-            if suggestion.context_length_max is not None:
-                self.gguf_context_limits[self.gguf_path_key(suggestion.model_path)] = suggestion.context_length_max
+            self.apply_gguf_suggestion_to_form(form, suggestion)
             self.model_service.apply_model_form(self.state.data, None, form)
             self.selected_model_id = model_id
             self.current_model_form = form
@@ -263,6 +263,9 @@ class LlamaSwapConfigEditor:
                 context_limit = self.gguf_context_limits.get(self.gguf_path_key(self.current_model_form.model_path))
                 if context_limit is not None:
                     self.current_model_form.context_length_max = context_limit
+                metadata = self.gguf_metadata_by_path.get(self.gguf_path_key(self.current_model_form.model_path))
+                if metadata:
+                    self.apply_gguf_metadata_to_form(self.current_model_form, metadata)
                 break
         self.refresh()
 
@@ -361,15 +364,19 @@ class LlamaSwapConfigEditor:
             return
 
         suggestion = import_gguf(model_path)
+        self.apply_gguf_suggestion_to_form(self.current_model_form, suggestion)
+        if "read_error" in suggestion.metadata:
+            self.state.last_message = f"GGUF読込失敗 / GGUF read failed: {suggestion.metadata['read_error']}"
+            self.refresh()
+            return
         if suggestion.context_length_max is None:
             error = suggestion.metadata.get("read_error")
             detail = f": {error}" if error else ""
-            self.state.last_message = f"Context長の最大値を取得できませんでした / Context max not found{detail}"
+            self.state.last_message = f"GGUFメタデータ読込OK。Context長の最大値は未検出 / Metadata loaded, context max not found{detail}"
             self.refresh()
             return
 
         context_limit = suggestion.context_length_max
-        self.gguf_context_limits[self.gguf_path_key(suggestion.model_path)] = context_limit
         self.current_model_form.context_length_max = context_limit
 
         current = self.current_model_form.context_length.strip()
@@ -388,6 +395,50 @@ class LlamaSwapConfigEditor:
                 else:
                     self.state.last_message = f"GGUFヘッダ読込OK。最大 Context長: {context_limit} / GGUF header loaded"
         self.refresh()
+
+    def apply_gguf_suggestion_to_form(self, form: ModelForm, suggestion) -> None:
+        path_key = self.gguf_path_key(suggestion.model_path)
+        if suggestion.context_length_max is not None:
+            self.gguf_context_limits[path_key] = suggestion.context_length_max
+        self.gguf_metadata_by_path[path_key] = suggestion.metadata
+        self.apply_gguf_metadata_to_form(form, suggestion.metadata)
+
+    def apply_gguf_metadata_to_form(self, form: ModelForm, metadata: dict) -> None:
+        form.gguf_metadata = metadata
+        detected = expert_used_count_metadata(metadata)
+        if not detected:
+            return
+        key, value = detected
+        form.expert_used_count_key = key
+        form.expert_used_count_source = value
+
+    def show_current_model_metadata(self, _event=None) -> None:
+        if self.current_model_form is None:
+            return
+        metadata = self.current_model_form.gguf_metadata
+        if not metadata:
+            self.state.last_message = "先にGGUFヘッダを読み込んでください / Read GGUF header first"
+            self.refresh()
+            return
+        dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("GGUF metadata"),
+            content=ft.Container(
+                width=780,
+                height=520,
+                content=ft.TextField(
+                    value=format_metadata_text(metadata),
+                    multiline=True,
+                    min_lines=20,
+                    max_lines=24,
+                    read_only=True,
+                ),
+            ),
+            actions=[ft.TextButton("Close", on_click=self.close_dialog)],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        self._active_dialog = dialog
+        self.page.show_dialog(dialog)
 
     def on_raw_changed(self, event: ft.ControlEvent) -> None:
         self.state.raw_yaml = event.control.value

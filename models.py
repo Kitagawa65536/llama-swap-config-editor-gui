@@ -21,10 +21,19 @@ class ModelForm:
     seed: str = ""
     k_cache_quant_type: str = ""
     v_cache_quant_type: str = ""
+    override_kv: str = ""
+    expert_used_count_key: str = ""
+    expert_used_count: str = ""
+    expert_used_count_source: str = ""
+    spec_type: str = ""
+    spec_ngram_size_n: str = ""
+    draft_min: str = ""
+    draft_max: str = ""
     ttl: str = ""
     aliases: list[str] = field(default_factory=list)
     name: str = ""
     custom_args: str = ""
+    gguf_metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

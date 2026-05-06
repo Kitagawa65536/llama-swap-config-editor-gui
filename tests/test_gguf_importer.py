@@ -1,4 +1,4 @@
-from gguf_importer import _first_context_length, normalize_context_length
+from gguf_importer import _first_context_length, expert_used_count_metadata, format_metadata_text, normalize_context_length
 
 
 def test_normalize_context_length_accepts_common_scalar_values():
@@ -25,3 +25,21 @@ def test_first_context_length_uses_architecture_specific_key():
     }
 
     assert _first_context_length(metadata, ["llama.context_length", "general.context_length"]) == 40960
+
+
+def test_expert_used_count_metadata_detects_moe_key():
+    metadata = {
+        "general.architecture": "qwen3moe",
+        "qwen3moe.expert_used_count": 8,
+    }
+
+    assert expert_used_count_metadata(metadata) == ("qwen3moe.expert_used_count", "8")
+
+
+def test_format_metadata_text_sorts_and_renders_values():
+    metadata = {
+        "z.key": [1, 2],
+        "a.key": b"value",
+    }
+
+    assert format_metadata_text(metadata) == "a.key: value\nz.key: [1, 2]"

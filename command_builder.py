@@ -19,6 +19,15 @@ KNOWN_CACHE_QUANT_TYPES = (
     "q5_1",
 )
 
+SPEC_TYPE_OPTIONS = (
+    "none",
+    "ngram-cache",
+    "ngram-simple",
+    "ngram-map-k",
+    "ngram-map-k4v",
+    "ngram-mod",
+)
+
 CACHE_TYPE_OPTIONS = {
     "--cache-type-k": "k_cache_quant_type",
     "--cache-type-v": "v_cache_quant_type",
@@ -40,9 +49,16 @@ VALUE_OPTIONS = {
     "--ubatch-size": "ubatch_size",
     "-ub": "ubatch_size",
     "--seed": "seed",
+    "--spec-ngram-size-n": "spec_ngram_size_n",
+    "--draft": "draft_max",
+    "--draft-n": "draft_max",
+    "--draft-min": "draft_min",
+    "--draft-n-min": "draft_min",
+    "--draft-max": "draft_max",
 }
 
 IGNORED_VALUE_OPTIONS = {"--port"}
+EXPERT_USED_COUNT_SUFFIX = ".expert_used_count"
 
 
 def quote_arg(value: str) -> str:
@@ -92,6 +108,21 @@ def build_command(form: ModelForm) -> str:
         text = str(value).strip()
         if text:
             args.extend([option, quote_arg(text)])
+    override_kv = _override_kv_value(form)
+    if override_kv:
+        args.extend(["--override-kv", quote_arg(override_kv)])
+    spec_type = form.spec_type.strip()
+    if spec_type:
+        args.extend(["--spec-type", quote_arg(spec_type)])
+    spec_map = [
+        ("--spec-ngram-size-n", form.spec_ngram_size_n),
+        ("--draft-min", form.draft_min),
+        ("--draft-max", form.draft_max),
+    ]
+    for option, value in spec_map:
+        text = str(value).strip()
+        if text:
+            args.extend([option, quote_arg(text)])
     custom = form.custom_args.strip()
     if custom:
         args.append(custom)
@@ -138,6 +169,19 @@ def parse_command(model_id: str, command: str) -> ModelForm:
             setattr(form, VALUE_OPTIONS[token], tokens[i + 1])
             i += 2
             continue
+        if token == "--override-kv" and i + 1 < len(tokens):
+            _apply_override_kv(form, tokens[i + 1])
+            i += 2
+            continue
+        if token == "--spec-type" and i + 1 < len(tokens):
+            value = tokens[i + 1]
+            if value in SPEC_TYPE_OPTIONS:
+                form.spec_type = value
+                i += 2
+                continue
+            custom.extend([token, quote_arg(value) if re.search(r"\s", value) else value])
+            i += 2
+            continue
         if token in IGNORED_VALUE_OPTIONS and i + 1 < len(tokens):
             i += 2
             continue
@@ -149,6 +193,46 @@ def parse_command(model_id: str, command: str) -> ModelForm:
 
 def _is_option_token(token: str) -> bool:
     return token.startswith("-")
+
+
+def _override_kv_value(form: ModelForm) -> str:
+    entries = [entry for entry in _split_override_kv_entries(form.override_kv) if not _is_expert_used_count_override(entry)]
+    expert_key = form.expert_used_count_key.strip()
+    expert_count = form.expert_used_count.strip()
+    if expert_key and expert_count:
+        entries.append(f"{expert_key}=int:{expert_count}")
+    return ",".join(entries)
+
+
+def _apply_override_kv(form: ModelForm, value: str) -> None:
+    passthrough_entries: list[str] = []
+    for entry in _split_override_kv_entries(value):
+        key, type_name, typed_value = _split_override_kv_entry(entry)
+        if key.endswith(EXPERT_USED_COUNT_SUFFIX) and type_name == "int":
+            form.expert_used_count_key = key
+            form.expert_used_count = typed_value
+            continue
+        passthrough_entries.append(entry)
+    form.override_kv = ",".join([*(_split_override_kv_entries(form.override_kv)), *passthrough_entries])
+
+
+def _split_override_kv_entries(value: str) -> list[str]:
+    return [part.strip() for part in str(value).split(",") if part.strip()]
+
+
+def _split_override_kv_entry(entry: str) -> tuple[str, str, str]:
+    key, separator, typed_value = entry.partition("=")
+    if not separator:
+        return key, "", ""
+    type_name, type_separator, value = typed_value.partition(":")
+    if not type_separator:
+        return key, "", typed_value
+    return key, type_name, value
+
+
+def _is_expert_used_count_override(entry: str) -> bool:
+    key, type_name, _value = _split_override_kv_entry(entry)
+    return key.endswith(EXPERT_USED_COUNT_SUFFIX) and type_name == "int"
 
 
 def update_form_from_mapping(model_id: str, mapping: dict) -> ModelForm:

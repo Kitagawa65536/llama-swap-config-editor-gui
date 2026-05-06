@@ -21,6 +21,8 @@ NAME_KEYS = [
     "general.finetune",
 ]
 
+EXPERT_USED_COUNT_SUFFIX = ".expert_used_count"
+
 
 def normalize_model_id(name: str) -> str:
     stem = Path(name).stem.lower()
@@ -60,6 +62,19 @@ def import_gguf(path: str | Path) -> GgufImportSuggestion:
 
 def import_many(paths: list[str | Path]) -> list[GgufImportSuggestion]:
     return [import_gguf(path) for path in paths]
+
+
+def expert_used_count_metadata(metadata: dict[str, Any]) -> tuple[str, str] | None:
+    for key in sorted(metadata):
+        if key.endswith(EXPERT_USED_COUNT_SUFFIX):
+            return key, _metadata_value_to_text(metadata[key])
+    return None
+
+
+def format_metadata_text(metadata: dict[str, Any]) -> str:
+    if not metadata:
+        return "メタデータがありません / No metadata loaded"
+    return "\n".join(f"{key}: {_metadata_value_to_text(metadata[key])}" for key in sorted(metadata))
 
 
 def _field_value(field: Any) -> Any:
@@ -147,3 +162,14 @@ def _normalize_text_value(value: Any) -> str:
         except UnicodeDecodeError:
             return ""
     return str(value).strip()
+
+
+def _metadata_value_to_text(value: Any) -> str:
+    if isinstance(value, bytes):
+        try:
+            return value.decode("utf-8")
+        except UnicodeDecodeError:
+            return repr(value)
+    if isinstance(value, list):
+        return "[" + ", ".join(_metadata_value_to_text(item) for item in value) + "]"
+    return "" if value is None else str(value)

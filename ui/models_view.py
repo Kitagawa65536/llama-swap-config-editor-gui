@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import flet as ft
 
-from command_builder import KNOWN_CACHE_QUANT_TYPES
+from command_builder import KNOWN_CACHE_QUANT_TYPES, SPEC_TYPE_OPTIONS
 
 
 def build_models(app) -> ft.Control:
@@ -96,6 +96,19 @@ def _cache_dropdown(label: str, value: str, on_change) -> ft.Dropdown:
     )
 
 
+def _spec_type_dropdown(value: str, on_change) -> ft.Dropdown:
+    return ft.Dropdown(
+        label="spec type",
+        value=value or "",
+        options=[
+            ft.dropdown.Option("", "未指定 / Clear"),
+            *[ft.dropdown.Option(option, option) for option in SPEC_TYPE_OPTIONS],
+        ],
+        on_select=on_change,
+        expand=True,
+    )
+
+
 def _model_form(app) -> ft.Control:
     f = app.current_model_form
 
@@ -112,11 +125,32 @@ def _model_form(app) -> ft.Control:
     advanced_section = ft.Column(
         visible=False,
         controls=[
-            ft.TextField(
-                label="advanced dummy input",
-                hint_text="本実装時に削除予定 / Placeholder for future advanced settings",
-                dense=True,
-            )
+            ft.Text("advance / Advanced model settings", weight=ft.FontWeight.BOLD),
+            ft.Row(
+                controls=[
+                    ft.OutlinedButton(
+                        "GGUFメタデータ表示 / Show metadata",
+                        icon=ft.Icons.DATA_OBJECT,
+                        on_click=app.show_current_model_metadata,
+                        disabled=not bool(f.gguf_metadata),
+                    ),
+                ]
+            ),
+            _expert_used_count_control(f, set_attr("expert_used_count")),
+            ft.Divider(),
+            ft.Text("n-gram speculative decoding", weight=ft.FontWeight.BOLD),
+            ft.Text(
+                "--spec-type はヘルプ掲載の値から選択できます / Choose --spec-type from help options",
+                size=12,
+            ),
+            _spec_type_dropdown(f.spec_type, set_attr("spec_type")),
+            ft.Row(
+                controls=[
+                    _field("spec ngram size n", f.spec_ngram_size_n, set_attr("spec_ngram_size_n")),
+                    _field("draft min", f.draft_min, set_attr("draft_min")),
+                    _field("draft max", f.draft_max, set_attr("draft_max")),
+                ]
+            ),
         ],
     )
 
@@ -276,6 +310,36 @@ def _context_length_control(f) -> ft.Control:
         controls=[
             context_field,
             context_slider,
+        ],
+    )
+
+
+def _expert_used_count_control(f, on_change) -> ft.Control:
+    if not f.expert_used_count_key:
+        return ft.Text(
+            "MoE expert_used_count は未検出です。GGUFヘッダ読込後、*.expert_used_count があれば入力欄を表示します / "
+            "No MoE expert_used_count detected yet",
+            size=12,
+        )
+
+    source = f"detected: {f.expert_used_count_source}" if f.expert_used_count_source else "override value"
+    return ft.Column(
+        spacing=4,
+        controls=[
+            ft.Text("MoE expert_used_count override", weight=ft.FontWeight.BOLD),
+            ft.Text(f"key: {f.expert_used_count_key}", size=12),
+            ft.TextField(
+                label="expert_used_count",
+                value=f.expert_used_count,
+                hint_text=source,
+                on_change=on_change,
+                dense=True,
+            ),
+            ft.Text(
+                "--override-kv key.expert_used_count=int:N としてcmdへ追加します / "
+                "Emits --override-kv key.expert_used_count=int:N",
+                size=12,
+            ),
         ],
     )
 
