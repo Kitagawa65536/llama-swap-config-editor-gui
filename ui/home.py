@@ -9,30 +9,30 @@ def build_home(app) -> ft.Control:
         for path in app.settings.recent_configs
     ]
     if not recent:
-        recent = [ft.Text("最近開いたconfigはありません / No recent configs")]
+        recent = [ft.Text(app.t("home.no_recent_configs"))]
 
     return ft.Column(
         expand=True,
         spacing=16,
         controls=[
-            ft.Text("Home", size=24, weight=ft.FontWeight.BOLD),
+            ft.Text(app.t("home.title"), size=24, weight=ft.FontWeight.BOLD),
             ft.Row(
                 wrap=True,
                 controls=[
-                    ft.Button("config.yaml を開く / Open config", on_click=app.pick_config),
+                    ft.Button(app.t("home.open_config"), on_click=app.pick_config),
                     # Bundled demo schema support is deferred; users currently select an external config-schema.json.
-                    ft.OutlinedButton("config-schema.json を選択 / Select schema", on_click=app.pick_schema),
+                    ft.OutlinedButton(app.t("home.select_schema"), on_click=app.pick_schema),
                     ft.Button(
-                        "GGUFからモデルを追加 / Add model from GGUF",
+                        app.t("home.add_gguf"),
                         height=56,
                         on_click=app.pick_gguf,
                     ),
                 ],
             ),
-            ft.Text(f"Config: {app.state.path or '-'}"),
-            ft.Text(f"Schema: {app.state.schema_path or '-'}"),
+            ft.Text(app.t("home.config_path", path=app.state.path or "-")),
+            ft.Text(app.t("home.schema_path", path=app.state.schema_path or "-")),
             ft.Divider(),
-            ft.Text("最近開いたconfig / Recent configs", weight=ft.FontWeight.BOLD),
+            ft.Text(app.t("home.recent_configs"), weight=ft.FontWeight.BOLD),
             ft.Column(controls=recent, scroll=ft.ScrollMode.AUTO, expand=True),
         ],
     )

@@ -18,26 +18,26 @@ def build_models(app) -> ft.Control:
                 ft.Row(
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     controls=[
-                        ft.Text("Models", size=20, weight=ft.FontWeight.BOLD),
+                        ft.Text(app.t("models.title"), size=20, weight=ft.FontWeight.BOLD),
                         ft.Row(
                             spacing=0,
                             controls=[
                                 ft.IconButton(
                                     ft.Icons.DELETE_OUTLINE,
-                                    tooltip="選択中モデルを削除",
+                                    tooltip=app.t("models.delete_selected.tooltip"),
                                     on_click=app.delete_current_model,
                                     disabled=app.selected_model_id is None,
                                 ),
-                                ft.IconButton(ft.Icons.ADD, tooltip="空のモデルを追加", on_click=app.add_empty_model),
+                                ft.IconButton(ft.Icons.ADD, tooltip=app.t("models.add_empty.tooltip"), on_click=app.add_empty_model),
                             ],
                         ),
                     ],
                 ),
                 ft.TextField(
-                    label="model_id で検索 / Search by model_id",
+                    label=app.t("models.search_label"),
                     value=app.model_search_term,
                     prefix_icon=ft.Icons.SEARCH,
-                    hint_text="例: qwen, mistral, vision",
+                    hint_text=app.t("models.search_hint"),
                     dense=True,
                     on_change=app.on_model_search_change,
                 ),
@@ -46,7 +46,7 @@ def build_models(app) -> ft.Control:
         ),
     )
 
-    right = _model_form(app) if app.current_model_form else ft.Container(expand=True, padding=16, content=ft.Text("左のモデルを選択してください / Select a model"))
+    right = _model_form(app) if app.current_model_form else ft.Container(expand=True, padding=16, content=ft.Text(app.t("models.select_prompt")))
     return ft.Row(expand=True, controls=[left, ft.VerticalDivider(width=1), right])
 
 
@@ -75,20 +75,20 @@ def build_model_cards(app) -> list[ft.Control]:
     if cards:
         return cards
     if app.model_search_term:
-        return [ft.Text("該当するモデルがありません / No matching models")]
-    return [ft.Text("モデルがありません / No models")]
+        return [ft.Text(app.t("models.no_matching"))]
+    return [ft.Text(app.t("models.no_models"))]
 
 
 def _field(label: str, value: str, on_change, password: bool = False, expand: bool | int | None = None) -> ft.TextField:
     return ft.TextField(label=label, value=value, on_change=on_change, password=password, dense=True, expand=expand)
 
 
-def _cache_dropdown(label: str, value: str, on_change) -> ft.Dropdown:
+def _cache_dropdown(app, label: str, value: str, on_change) -> ft.Dropdown:
     return ft.Dropdown(
         label=label,
         value=value or "",
         options=[
-            ft.dropdown.Option("", "未指定 / Clear"),
+            ft.dropdown.Option("", app.t("models.clear")),
             *[ft.dropdown.Option(option, option) for option in KNOWN_CACHE_QUANT_TYPES],
         ],
         on_select=on_change,
@@ -96,12 +96,12 @@ def _cache_dropdown(label: str, value: str, on_change) -> ft.Dropdown:
     )
 
 
-def _spec_type_dropdown(value: str, on_change) -> ft.Dropdown:
+def _spec_type_dropdown(app, value: str, on_change) -> ft.Dropdown:
     return ft.Dropdown(
         label="spec type",
         value=value or "",
         options=[
-            ft.dropdown.Option("", "未指定 / Clear"),
+            ft.dropdown.Option("", app.t("models.clear")),
             *[ft.dropdown.Option(option, option) for option in SPEC_TYPE_OPTIONS],
         ],
         on_select=on_change,
@@ -125,25 +125,25 @@ def _model_form(app) -> ft.Control:
     advanced_section = ft.Column(
         visible=False,
         controls=[
-            ft.Text("advance / Advanced model settings", weight=ft.FontWeight.BOLD),
+            ft.Text(app.t("models.advanced.title"), weight=ft.FontWeight.BOLD),
             ft.Row(
                 controls=[
                     ft.OutlinedButton(
-                        "GGUFメタデータ表示 / Show metadata",
+                        app.t("models.advanced.show_metadata"),
                         icon=ft.Icons.DATA_OBJECT,
                         on_click=app.show_current_model_metadata,
                         disabled=not bool(f.gguf_metadata),
                     ),
                 ]
             ),
-            _expert_used_count_control(f, set_attr("expert_used_count")),
+            _expert_used_count_control(f, set_attr("expert_used_count"), app),
             ft.Divider(),
             ft.Text("n-gram speculative decoding", weight=ft.FontWeight.BOLD),
             ft.Text(
-                "--spec-type はヘルプ掲載の値から選択できます / Choose --spec-type from help options",
+                app.t("models.advanced.description"),
                 size=12,
             ),
-            _spec_type_dropdown(f.spec_type, set_attr("spec_type")),
+            _spec_type_dropdown(app, f.spec_type, set_attr("spec_type")),
             ft.Row(
                 controls=[
                     _field("spec ngram size n", f.spec_ngram_size_n, set_attr("spec_ngram_size_n")),
@@ -165,7 +165,7 @@ def _model_form(app) -> ft.Control:
             expand=True,
             scroll=ft.ScrollMode.AUTO,
             controls=[
-                ft.Text("モデル編集 / Model editor", size=22, weight=ft.FontWeight.BOLD),
+                ft.Text(app.t("models.editor_title"), size=22, weight=ft.FontWeight.BOLD),
                 _field("model_id", f.model_id, set_attr("model_id")),
                 _field("name", f.name, set_attr("name")),
                 ft.Row(
@@ -187,7 +187,7 @@ def _model_form(app) -> ft.Control:
                             on_click=lambda _e: app.page.run_task(app.pick_model_path),
                         ),
                         ft.OutlinedButton(
-                            "GGUFヘッダ読込 / Read GGUF header",
+                            app.t("models.read_gguf_header"),
                             icon=ft.Icons.DATA_OBJECT,
                             on_click=app.load_current_model_gguf_header,
                         ),
@@ -228,7 +228,7 @@ def _model_form(app) -> ft.Control:
                             label="KV cache GPU offload",
                             value="on" if f.kv_cache_gpu_offload is True else "off" if f.kv_cache_gpu_offload is False else "unset",
                             options=[
-                                ft.dropdown.Option("unset", "未指定 / Unset"),
+                                ft.dropdown.Option("unset", app.t("models.unset")),
                                 ft.dropdown.Option("on", "ON"),
                                 ft.dropdown.Option("off", "OFF"),
                             ],
@@ -238,19 +238,19 @@ def _model_form(app) -> ft.Control:
                 ),
                 ft.Row(
                     controls=[
-                        _cache_dropdown("K cache type", f.k_cache_quant_type, set_attr("k_cache_quant_type")),
-                        _cache_dropdown("V cache type", f.v_cache_quant_type, set_attr("v_cache_quant_type")),
+                        _cache_dropdown(app, "K cache type", f.k_cache_quant_type, set_attr("k_cache_quant_type")),
+                        _cache_dropdown(app, "V cache type", f.v_cache_quant_type, set_attr("v_cache_quant_type")),
                     ]
                 ),
                 _field("ttl", f.ttl, set_attr("ttl")),
                 _field("aliases (comma separated)", ", ".join(f.aliases), set_aliases),
                 ft.TextField(label="custom args", value=f.custom_args, min_lines=3, max_lines=5, on_change=set_attr("custom_args")),
-                ft.OutlinedButton("Advanced settings / advance", icon=ft.Icons.TUNE, on_click=toggle_advanced),
+                ft.OutlinedButton(app.t("models.advanced.toggle"), icon=ft.Icons.TUNE, on_click=toggle_advanced),
                 advanced_section,
                 ft.Row(
                     controls=[
-                        ft.Button("フォームを反映 / Apply form", on_click=app.apply_current_model),
-                        ft.OutlinedButton("cmdプレビュー / Preview cmd", on_click=app.preview_current_cmd),
+                        ft.Button(app.t("models.apply_form"), on_click=app.apply_current_model),
+                        ft.OutlinedButton(app.t("models.preview_cmd"), on_click=app.preview_current_cmd),
                     ]
                 ),
             ],
@@ -314,11 +314,10 @@ def _context_length_control(f) -> ft.Control:
     )
 
 
-def _expert_used_count_control(f, on_change) -> ft.Control:
+def _expert_used_count_control(f, on_change, app=None) -> ft.Control:
     if not f.expert_used_count_key:
         return ft.Text(
-            "MoE expert_used_count は未検出です。GGUFヘッダ読込後、*.expert_used_count があれば入力欄を表示します / "
-            "No MoE expert_used_count detected yet",
+            app.t("models.advanced.moe_not_detected") if app else "No MoE expert_used_count detected yet",
             size=12,
         )
 
@@ -336,8 +335,7 @@ def _expert_used_count_control(f, on_change) -> ft.Control:
                 dense=True,
             ),
             ft.Text(
-                "--override-kv key.expert_used_count=int:N としてcmdへ追加します / "
-                "Emits --override-kv key.expert_used_count=int:N",
+                app.t("models.advanced.override_description") if app else "Emits --override-kv key.expert_used_count=int:N",
                 size=12,
             ),
         ],

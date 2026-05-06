@@ -66,7 +66,7 @@ class ConfigState:
     data: Any = None
     raw_yaml: str = ""
     dirty: bool = False
-    validation_message: str = "未検証 / Not validated"
+    validation_message: str = "Not validated"
     last_message: str = ""
 
 

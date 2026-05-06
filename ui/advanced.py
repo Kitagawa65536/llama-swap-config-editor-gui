@@ -10,16 +10,16 @@ def build_advanced(app) -> ft.Control:
         snippets.append(ft.Text(f"{section.key}:", weight=ft.FontWeight.BOLD))
         snippets.append(ft.Text(section.yaml_fragment, selectable=True))
     if not snippets:
-        snippets.append(ft.Text("Advanced項目はありません / No advanced sections"))
+        snippets.append(ft.Text(app.t("advanced.empty")))
 
-    controls = [ft.Text("Advanced", size=24, weight=ft.FontWeight.BOLD)]
+    controls = [ft.Text(app.t("advanced.title"), size=24, weight=ft.FontWeight.BOLD)]
     if app.has_advanced_conflict():
         controls.append(
             ft.Container(
                 padding=10,
                 bgcolor=ft.Colors.ERROR_CONTAINER,
                 border_radius=6,
-                content=ft.Text("警告: matrix と groups は同時利用できません / matrix and groups cannot be used together"),
+                content=ft.Text(app.t("advanced.conflict")),
             )
         )
     controls.extend(snippets)

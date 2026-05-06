@@ -73,7 +73,7 @@ def expert_used_count_metadata(metadata: dict[str, Any]) -> tuple[str, str] | No
 
 def format_metadata_text(metadata: dict[str, Any]) -> str:
     if not metadata:
-        return "メタデータがありません / No metadata loaded"
+        return "No metadata loaded"
     return "\n".join(f"{key}: {_metadata_value_to_text(metadata[key])}" for key in sorted(metadata))
 
 

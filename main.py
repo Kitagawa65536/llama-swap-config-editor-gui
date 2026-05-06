@@ -10,6 +10,7 @@ from ruamel.yaml.comments import CommentedMap
 from app_settings import AppSettingsRepository
 from config_services import AdvancedConfigService, GlobalSettingsService, ModelConfigService
 from gguf_importer import expert_used_count_metadata, format_metadata_text, import_gguf, import_many
+from i18n import I18n, SUPPORTED_LOCALES
 from models import AdvancedSection, ConfigState, GlobalSettingsForm, ModelForm, ModelListItem
 from schema_validator import ConfigSchemaValidator
 from ui.advanced import build_advanced
@@ -42,7 +43,9 @@ class LlamaSwapConfigEditor:
         self.advanced_service = AdvancedConfigService(self.store)
         self.settings_repo = AppSettingsRepository()
         self.settings = self.settings_repo.load()
+        self.i18n = I18n(self.settings.language)
         self.state = ConfigState()
+        self.state.validation_message = self.t("validation.not_validated")
         self.validator = ConfigSchemaValidator()
         self.selected_model_id: str | None = None
         self.model_search_term: str = ""
@@ -103,11 +106,11 @@ class LlamaSwapConfigEditor:
             label_type=ft.NavigationRailLabelType.ALL,
             min_width=96,
             destinations=[
-                ft.NavigationRailDestination(icon=ft.Icons.HOME, label="Home"),
-                ft.NavigationRailDestination(icon=ft.Icons.LIST, label="Models"),
-                ft.NavigationRailDestination(icon=ft.Icons.SETTINGS, label="Global"),
-                ft.NavigationRailDestination(icon=ft.Icons.TUNE, label="Advanced"),
-                ft.NavigationRailDestination(icon=ft.Icons.CODE, label="Raw YAML"),
+                ft.NavigationRailDestination(icon=ft.Icons.HOME, label=self.t("nav.home")),
+                ft.NavigationRailDestination(icon=ft.Icons.LIST, label=self.t("nav.models")),
+                ft.NavigationRailDestination(icon=ft.Icons.SETTINGS, label=self.t("nav.global")),
+                ft.NavigationRailDestination(icon=ft.Icons.TUNE, label=self.t("nav.advanced")),
+                ft.NavigationRailDestination(icon=ft.Icons.CODE, label=self.t("nav.raw")),
             ],
             on_change=self.on_nav,
         )
@@ -118,15 +121,39 @@ class LlamaSwapConfigEditor:
             content=ft.Row(
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 controls=[
-                    ft.Text("変更あり / Dirty" if self.state.dirty else "変更なし / Clean"),
+                    ft.Text(self.t("status.dirty") if self.state.dirty else self.t("status.clean")),
                     ft.Text(self.state.validation_message, overflow=ft.TextOverflow.ELLIPSIS),
                     ft.Text(self.state.last_message, overflow=ft.TextOverflow.ELLIPSIS),
-                    ft.Button("検証 / Validate", on_click=self.validate_config),
-                    ft.Button("保存 / Save", on_click=self.save_config),
+                    ft.Dropdown(
+                        label=self.t("language.label"),
+                        value=self.settings.language,
+                        width=150,
+                        dense=True,
+                        options=[
+                            ft.dropdown.Option(locale, self.t(f"language.{locale}"))
+                            for locale in SUPPORTED_LOCALES
+                        ],
+                        on_select=self.on_language_change,
+                    ),
+                    ft.Button(self.t("status.validate"), on_click=self.validate_config),
+                    ft.Button(self.t("status.save"), on_click=self.save_config),
                 ],
             ),
         )
         return ft.Column(expand=True, controls=[ft.Row(expand=True, controls=[rail, ft.VerticalDivider(width=1), content]), status])
+
+    def t(self, key: str, **kwargs) -> str:
+        return self.i18n.translate(key, **kwargs)
+
+    def on_language_change(self, event: ft.ControlEvent) -> None:
+        language = event.control.value
+        if not language or language == self.settings.language:
+            return
+        self.settings_repo.set_language(self.settings, language)
+        self.i18n.set_locale(language)
+        if self.state.validation_message == "Not validated":
+            self.state.validation_message = self.t("validation.not_validated")
+        self.refresh()
 
     def build_route_content(self) -> ft.Control:
         route = self.page.route
@@ -187,10 +214,10 @@ class LlamaSwapConfigEditor:
             self.state.schema_path = Path(files[0].path)
             self.validator.load(self.state.schema_path)
             self.settings_repo.add_recent_schema(self.settings, str(self.state.schema_path))
-            self.state.validation_message = "schema読込OK / Schema loaded"
+            self.state.validation_message = self.t("message.schema_loaded")
             self.validate_config()
         except Exception as exc:
-            self.state.last_message = f"schema読込失敗 / Schema load failed: {exc}"
+            self.state.last_message = self.t("message.schema_load_failed", error=exc)
             self.refresh()
 
     def handle_gguf_files(self, files: list[ft.FilePickerFile] | None) -> None:
@@ -217,7 +244,7 @@ class LlamaSwapConfigEditor:
             self.model_service.apply_model_form(self.state.data, None, form)
             self.selected_model_id = model_id
             self.current_model_form = form
-        self.mark_dirty(f"{len(suggestions)}件のGGUFを追加しました / GGUF model(s) added")
+        self.mark_dirty(self.t("message.gguf_added", count=len(suggestions)))
         self.navigate("/models")
 
     def handle_llama_server_file(self, files: list[ft.FilePickerFile] | None) -> None:
@@ -247,10 +274,10 @@ class LlamaSwapConfigEditor:
             self.global_form = self.global_settings_service.global_settings_form(data)
             self.raw_editor = None
             self.settings_repo.add_recent_config(self.settings, str(path))
-            self.state.last_message = "config読込OK / Config loaded"
+            self.state.last_message = self.t("message.config_loaded")
             self.validate_config()
         except Exception as exc:
-            self.state.last_message = f"config読込失敗 / Config load failed: {exc}"
+            self.state.last_message = self.t("message.config_load_failed", error=exc)
             self.refresh()
 
     def select_model(self, model_id: str) -> None:
@@ -278,21 +305,20 @@ class LlamaSwapConfigEditor:
         self.model_service.apply_model_form(self.state.data, None, form)
         self.selected_model_id = model_id
         self.current_model_form = form
-        self.mark_dirty("空のモデルを追加しました / Empty model added")
+        self.mark_dirty(self.t("message.empty_model_added"))
 
     def delete_current_model(self, _event=None) -> None:
         if not self.selected_model_id:
             return
         dialog = ft.AlertDialog(
             modal=True,
-            title=ft.Text("モデルを削除しますか？ / Delete model?"),
+            title=ft.Text(self.t("dialog.delete_model.title")),
             content=ft.Text(
-                f"{self.selected_model_id} を config.yaml から削除します。"
-                "未反映のフォーム編集は破棄されます。"
+                self.t("dialog.delete_model.content", model_id=self.selected_model_id)
             ),
             actions=[
-                ft.TextButton("Cancel", on_click=self.close_dialog),
-                ft.TextButton("Delete", on_click=self.confirm_delete_current_model),
+                ft.TextButton(self.t("dialog.cancel"), on_click=self.close_dialog),
+                ft.TextButton(self.t("dialog.delete"), on_click=self.confirm_delete_current_model),
             ],
             actions_alignment=ft.MainAxisAlignment.END,
         )
@@ -314,17 +340,17 @@ class LlamaSwapConfigEditor:
             deleted = self.model_service.delete_model(self.state.data, model_id)
             self.close_dialog()
             if not deleted:
-                self.state.last_message = f"モデルが見つかりません / Model not found: {model_id}"
+                self.state.last_message = self.t("message.model_not_found", model_id=model_id)
                 self.refresh()
                 return
             self.selected_model_id = None
             self.current_model_form = None
             self.state.raw_yaml = self.store.dump_to_string(self.state.data)
             self.raw_editor = None
-            self.mark_dirty(f"モデルを削除しました / Model deleted: {model_id}")
+            self.mark_dirty(self.t("message.model_deleted", model_id=model_id))
         except Exception as exc:
             self.close_dialog()
-            self.state.last_message = f"削除失敗 / Delete failed: {exc}"
+            self.state.last_message = self.t("message.delete_failed", error=exc)
             self.refresh()
 
     def apply_current_model(self, _event=None) -> None:
@@ -336,9 +362,9 @@ class LlamaSwapConfigEditor:
             self.selected_model_id = self.current_model_form.model_id
             self.state.raw_yaml = self.store.dump_to_string(self.state.data)
             self.raw_editor = None
-            self.mark_dirty("モデルフォームを反映しました / Model form applied")
+            self.mark_dirty(self.t("message.model_form_applied"))
         except Exception as exc:
-            self.state.last_message = f"反映失敗 / Apply failed: {exc}"
+            self.state.last_message = self.t("message.apply_failed", error=exc)
             self.refresh()
 
     def apply_global_settings(self, _event=None) -> None:
@@ -347,7 +373,7 @@ class LlamaSwapConfigEditor:
         self.global_settings_service.apply_global_settings(self.state.data, self.global_form)
         self.state.raw_yaml = self.store.dump_to_string(self.state.data)
         self.raw_editor = None
-        self.mark_dirty("Global Settingsを反映しました / Global settings applied")
+        self.mark_dirty(self.t("message.global_settings_applied"))
 
     def preview_current_cmd(self, _event=None) -> None:
         if self.current_model_form:
@@ -359,20 +385,20 @@ class LlamaSwapConfigEditor:
             return
         model_path = self.current_model_form.model_path.strip()
         if not model_path:
-            self.state.last_message = "GGUF model pathを入力してください / Enter a GGUF model path first"
+            self.state.last_message = self.t("message.gguf_model_path_required")
             self.refresh()
             return
 
         suggestion = import_gguf(model_path)
         self.apply_gguf_suggestion_to_form(self.current_model_form, suggestion)
         if "read_error" in suggestion.metadata:
-            self.state.last_message = f"GGUF読込失敗 / GGUF read failed: {suggestion.metadata['read_error']}"
+            self.state.last_message = self.t("message.gguf_read_failed", error=suggestion.metadata["read_error"])
             self.refresh()
             return
         if suggestion.context_length_max is None:
             error = suggestion.metadata.get("read_error")
             detail = f": {error}" if error else ""
-            self.state.last_message = f"GGUFメタデータ読込OK。Context長の最大値は未検出 / Metadata loaded, context max not found{detail}"
+            self.state.last_message = self.t("message.gguf_context_max_not_found", detail=detail)
             self.refresh()
             return
 
@@ -382,18 +408,18 @@ class LlamaSwapConfigEditor:
         current = self.current_model_form.context_length.strip()
         if not current:
             self.current_model_form.context_length = str(context_limit)
-            self.state.last_message = f"GGUFヘッダ読込OK。Context長を最大値 {context_limit} にしました / GGUF header loaded"
+            self.state.last_message = self.t("message.gguf_header_loaded_with_context", context_limit=context_limit)
         else:
             try:
                 current_value = int(current)
             except ValueError:
-                self.state.last_message = f"GGUFヘッダ読込OK。最大 Context長: {context_limit} / GGUF header loaded"
+                self.state.last_message = self.t("message.gguf_header_loaded", context_limit=context_limit)
             else:
                 if current_value > context_limit:
                     self.current_model_form.context_length = str(context_limit)
-                    self.state.last_message = f"Context長が最大値を超えていたため {context_limit} に丸めました / Clamped to GGUF max"
+                    self.state.last_message = self.t("message.gguf_context_clamped", context_limit=context_limit)
                 else:
-                    self.state.last_message = f"GGUFヘッダ読込OK。最大 Context長: {context_limit} / GGUF header loaded"
+                    self.state.last_message = self.t("message.gguf_header_loaded", context_limit=context_limit)
         self.refresh()
 
     def apply_gguf_suggestion_to_form(self, form: ModelForm, suggestion) -> None:
@@ -417,7 +443,7 @@ class LlamaSwapConfigEditor:
             return
         metadata = self.current_model_form.gguf_metadata
         if not metadata:
-            self.state.last_message = "先にGGUFヘッダを読み込んでください / Read GGUF header first"
+            self.state.last_message = self.t("message.read_gguf_first")
             self.refresh()
             return
         dialog = ft.AlertDialog(
@@ -434,7 +460,7 @@ class LlamaSwapConfigEditor:
                     read_only=True,
                 ),
             ),
-            actions=[ft.TextButton("Close", on_click=self.close_dialog)],
+            actions=[ft.TextButton(self.t("dialog.close"), on_click=self.close_dialog)],
             actions_alignment=ft.MainAxisAlignment.END,
         )
         self._active_dialog = dialog
@@ -451,17 +477,19 @@ class LlamaSwapConfigEditor:
             self.global_form = self.global_settings_service.global_settings_form(data)
             self.selected_model_id = None
             self.current_model_form = None
-            self.mark_dirty("Raw YAMLをフォームへ反映しました / Raw YAML applied")
+            self.mark_dirty(self.t("message.raw_applied"))
         except Exception as exc:
-            self.state.last_message = f"Raw YAML反映失敗。フォーム状態は維持しました / Apply failed: {exc}"
+            self.state.last_message = self.t("message.raw_apply_failed", error=exc)
             self.refresh()
 
     def validate_config(self, _event=None) -> None:
         if self.state.data is None:
-            self.state.validation_message = "config未読込 / No config loaded"
+            self.state.validation_message = self.t("message.config_not_loaded")
         else:
             try:
                 ok, message = self.validator.validate(self.state.data)
+                if message == "Schema not selected; validation skipped":
+                    message = self.t("message.schema_not_selected")
                 self.state.validation_message = ("OK: " if ok else "NG: ") + message
             except Exception as exc:
                 self.state.validation_message = f"validation error: {exc}"
@@ -469,26 +497,26 @@ class LlamaSwapConfigEditor:
 
     def save_config(self, _event=None) -> None:
         if self.state.path is None:
-            self.state.last_message = "保存先config.yamlを先に開いてください / Open a config path first"
+            self.state.last_message = self.t("message.save_path_required")
             self.refresh()
             return
         if self.page.route == "/raw":
             try:
                 self.state.data = self.store.parse_raw(self.state.raw_yaml)
             except Exception as exc:
-                self.state.last_message = f"YAML構文エラーのため保存不可 / YAML error: {exc}"
+                self.state.last_message = self.t("message.yaml_error", error=exc)
                 self.refresh()
                 return
         else:
             try:
                 self.apply_pending_form_edits_for_save()
             except Exception as exc:
-                self.state.last_message = f"フォーム反映失敗のため保存不可 / Apply form failed: {exc}"
+                self.state.last_message = self.t("message.apply_form_failed", error=exc)
                 self.refresh()
                 return
         try:
             ok, message, _backup = self.store.save(self.state.path, self.state.data, self.validator)
-            self.state.last_message = message
+            self.state.last_message = self.t("message.save_ok", backup=_backup.name) if ok and _backup else message
             if ok:
                 self.state.raw_yaml = self.store.dump_to_string(self.state.data)
                 self.state.dirty = False
@@ -497,7 +525,7 @@ class LlamaSwapConfigEditor:
             else:
                 self.refresh()
         except Exception as exc:
-            self.state.last_message = f"保存失敗 / Save failed: {exc}"
+            self.state.last_message = self.t("message.save_failed", error=exc)
             self.refresh()
 
     def apply_pending_form_edits_for_save(self) -> None:

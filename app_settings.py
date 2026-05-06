@@ -13,6 +13,8 @@ APP_AUTHOR = "config"
 
 @dataclass
 class AppSettings:
+    settings_version: int = 1
+    language: str = "ja"
     recent_configs: list[str] = field(default_factory=list)
     recent_schemas: list[str] = field(default_factory=list)
     default_llama_server_path: str = ""
@@ -32,6 +34,7 @@ class AppSettingsRepository:
             values = {key: data.get(key, getattr(defaults, key)) for key in AppSettings.__dataclass_fields__}
             values["recent_configs"] = values["recent_configs"] or []
             values["recent_schemas"] = values["recent_schemas"] or []
+            values["language"] = values["language"] or defaults.language
             values["default_llama_server_path"] = values["default_llama_server_path"] or ""
             values["default_models_dir"] = values["default_models_dir"] or ""
             return AppSettings(**values)
@@ -48,6 +51,10 @@ class AppSettingsRepository:
 
     def add_recent_schema(self, settings: AppSettings, path: str) -> None:
         settings.recent_schemas = _with_recent(settings.recent_schemas, path)
+        self.save(settings)
+
+    def set_language(self, settings: AppSettings, language: str) -> None:
+        settings.language = language
         self.save(settings)
 
 

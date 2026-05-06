@@ -20,11 +20,11 @@ def build_raw_yaml(app) -> ft.Control:
             ft.Row(
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 controls=[
-                    ft.Text("Raw YAML Editor", size=24, weight=ft.FontWeight.BOLD),
+                    ft.Text(app.t("raw.title"), size=24, weight=ft.FontWeight.BOLD),
                     ft.Row(
                         controls=[
-                            ft.OutlinedButton("フォームへ反映 / Apply raw to forms", on_click=app.apply_raw_yaml),
-                            ft.Button("保存 / Save", on_click=app.save_config),
+                            ft.OutlinedButton(app.t("raw.apply"), on_click=app.apply_raw_yaml),
+                            ft.Button(app.t("raw.save"), on_click=app.save_config),
                         ]
                     ),
                 ],

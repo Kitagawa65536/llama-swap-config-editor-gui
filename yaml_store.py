@@ -67,10 +67,10 @@ class YamlConfigStore:
             with tmp_path.open("w", encoding="utf-8", newline="\n") as file:
                 self.yaml.dump(data, file)
             os.replace(tmp_path, config_path)
-            return True, f"保存しました / Saved. Backup: {backup_path.name}", backup_path
         finally:
             if tmp_path.exists():
                 tmp_path.unlink(missing_ok=True)
+        return True, f"Saved. Backup: {backup_path.name}", backup_path
 
     def _backup_path(self, config_path: Path) -> Path:
         backup_dir = config_path.parent / "config_backup"

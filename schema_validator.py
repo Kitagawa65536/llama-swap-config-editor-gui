@@ -30,7 +30,7 @@ class ConfigSchemaValidator:
             if self.schema_path:
                 self.load()
             else:
-                return True, "schema未選択のため検証をスキップ / Schema not selected"
+                return True, "Schema not selected; validation skipped"
         try:
             jsonschema.Draft202012Validator.check_schema(self._schema)
             validator = jsonschema.Draft202012Validator(self._schema)
