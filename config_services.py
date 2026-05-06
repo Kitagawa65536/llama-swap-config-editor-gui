@@ -71,6 +71,15 @@ class ModelConfigService:
         elif "name" in model:
             del model["name"]
 
+    def delete_model(self, data: Any, model_id: str) -> bool:
+        models = data.get("models") if isinstance(data, dict) else None
+        if not isinstance(models, CommentedMap):
+            raise YamlStoreError("models must be a mapping")
+        if model_id not in models:
+            return False
+        del models[model_id]
+        return True
+
     def preview_command(self, form: ModelForm) -> str:
         return build_command(form)
 

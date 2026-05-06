@@ -62,6 +62,7 @@ class YamlConfigStore:
         tmp_path = config_path.with_name(config_path.name + ".tmp")
         try:
             if config_path.exists():
+                backup_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(config_path, backup_path)
             with tmp_path.open("w", encoding="utf-8", newline="\n") as file:
                 self.yaml.dump(data, file)
@@ -72,8 +73,9 @@ class YamlConfigStore:
                 tmp_path.unlink(missing_ok=True)
 
     def _backup_path(self, config_path: Path) -> Path:
-        simple = config_path.with_suffix(config_path.suffix + ".bak")
+        backup_dir = config_path.parent / "config_backup"
+        simple = backup_dir / f"{config_path.name}.bak"
         if not simple.exists():
             return simple
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        return config_path.with_name(f"{config_path.name}.{timestamp}.bak")
+        return backup_dir / f"{config_path.name}.{timestamp}.bak"

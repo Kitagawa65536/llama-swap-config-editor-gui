@@ -37,6 +37,8 @@ VALUE_OPTIONS = {
     "-t": "cpu_threads",
     "--batch-size": "eval_batch_size",
     "-b": "eval_batch_size",
+    "--ubatch-size": "ubatch_size",
+    "-ub": "ubatch_size",
     "--seed": "seed",
 }
 
@@ -80,6 +82,7 @@ def build_command(form: ModelForm) -> str:
         ("--n-gpu-layers", form.gpu_offload_layers),
         ("--threads", form.cpu_threads),
         ("--batch-size", form.eval_batch_size),
+        ("--ubatch-size", form.ubatch_size),
         ("--seed", form.seed),
         ("--cache-type-k", form.k_cache_quant_type),
         ("--cache-type-v", form.v_cache_quant_type),

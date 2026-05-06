@@ -16,6 +16,7 @@ class ModelForm:
     gpu_offload_layers: str = ""
     cpu_threads: str = ""
     eval_batch_size: str = ""
+    ubatch_size: str = ""
     kv_cache_gpu_offload: bool | None = None
     seed: str = ""
     k_cache_quant_type: str = ""
@@ -70,6 +71,7 @@ class GgufImportSuggestion:
     gpu_offload_layers: str = ""
     cpu_threads: str = ""
     eval_batch_size: str = ""
+    ubatch_size: str = ""
     seed: str = ""
     k_cache_quant_type: str = ""
     v_cache_quant_type: str = ""

@@ -6,6 +6,51 @@ from command_builder import KNOWN_CACHE_QUANT_TYPES
 
 
 def build_models(app) -> ft.Control:
+    cards = build_model_cards(app)
+    app.model_list_column = ft.Column(controls=cards, scroll=ft.ScrollMode.AUTO, expand=True)
+
+    left = ft.Container(
+        width=330,
+        padding=10,
+        content=ft.Column(
+            expand=True,
+            controls=[
+                ft.Row(
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    controls=[
+                        ft.Text("Models", size=20, weight=ft.FontWeight.BOLD),
+                        ft.Row(
+                            spacing=0,
+                            controls=[
+                                ft.IconButton(
+                                    ft.Icons.DELETE_OUTLINE,
+                                    tooltip="選択中モデルを削除",
+                                    on_click=app.delete_current_model,
+                                    disabled=app.selected_model_id is None,
+                                ),
+                                ft.IconButton(ft.Icons.ADD, tooltip="空のモデルを追加", on_click=app.add_empty_model),
+                            ],
+                        ),
+                    ],
+                ),
+                ft.TextField(
+                    label="model_id で検索 / Search by model_id",
+                    value=app.model_search_term,
+                    prefix_icon=ft.Icons.SEARCH,
+                    hint_text="例: qwen, mistral, vision",
+                    dense=True,
+                    on_change=app.on_model_search_change,
+                ),
+                app.model_list_column,
+            ],
+        ),
+    )
+
+    right = _model_form(app) if app.current_model_form else ft.Container(expand=True, padding=16, content=ft.Text("左のモデルを選択してください / Select a model"))
+    return ft.Row(expand=True, controls=[left, ft.VerticalDivider(width=1), right])
+
+
+def build_model_cards(app) -> list[ft.Control]:
     items = app.model_list_items()
     cards = []
     for item in items:
@@ -27,27 +72,11 @@ def build_models(app) -> ft.Control:
                 ),
             )
         )
-
-    left = ft.Container(
-        width=330,
-        padding=10,
-        content=ft.Column(
-            expand=True,
-            controls=[
-                ft.Row(
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                    controls=[
-                        ft.Text("Models", size=20, weight=ft.FontWeight.BOLD),
-                        ft.IconButton(ft.Icons.ADD, tooltip="空のモデルを追加", on_click=app.add_empty_model),
-                    ],
-                ),
-                ft.Column(controls=cards or [ft.Text("モデルがありません / No models")], scroll=ft.ScrollMode.AUTO, expand=True),
-            ],
-        ),
-    )
-
-    right = _model_form(app) if app.current_model_form else ft.Container(expand=True, padding=16, content=ft.Text("左のモデルを選択してください / Select a model"))
-    return ft.Row(expand=True, controls=[left, ft.VerticalDivider(width=1), right])
+    if cards:
+        return cards
+    if app.model_search_term:
+        return [ft.Text("該当するモデルがありません / No matching models")]
+    return [ft.Text("モデルがありません / No models")]
 
 
 def _field(label: str, value: str, on_change, password: bool = False, expand: bool | int | None = None) -> ft.TextField:
@@ -79,6 +108,21 @@ def _model_form(app) -> ft.Control:
     def set_kv(e):
         value = e.control.value
         f.kv_cache_gpu_offload = True if value == "on" else False if value == "off" else None
+
+    advanced_section = ft.Column(
+        visible=False,
+        controls=[
+            ft.TextField(
+                label="advanced dummy input",
+                hint_text="本実装時に削除予定 / Placeholder for future advanced settings",
+                dense=True,
+            )
+        ],
+    )
+
+    def toggle_advanced(_e):
+        advanced_section.visible = not advanced_section.visible
+        advanced_section.update()
 
     return ft.Container(
         expand=True,
@@ -139,6 +183,11 @@ def _model_form(app) -> ft.Control:
                 ),
                 ft.Row(
                     controls=[
+                        _field("ubatch size", f.ubatch_size, set_attr("ubatch_size")),
+                    ]
+                ),
+                ft.Row(
+                    controls=[
                         _field("seed", f.seed, set_attr("seed")),
                         # KV cache GPU offload is captured in the form but command emission is intentionally deferred.
                         ft.Dropdown(
@@ -162,6 +211,8 @@ def _model_form(app) -> ft.Control:
                 _field("ttl", f.ttl, set_attr("ttl")),
                 _field("aliases (comma separated)", ", ".join(f.aliases), set_aliases),
                 ft.TextField(label="custom args", value=f.custom_args, min_lines=3, max_lines=5, on_change=set_attr("custom_args")),
+                ft.OutlinedButton("Advanced settings / advance", icon=ft.Icons.TUNE, on_click=toggle_advanced),
+                advanced_section,
                 ft.Row(
                     controls=[
                         ft.Button("フォームを反映 / Apply form", on_click=app.apply_current_model),

@@ -78,6 +78,7 @@ def test_build_command_adds_optional_values_in_order():
         gpu_offload_layers="0",
         cpu_threads="8",
         eval_batch_size="512",
+        ubatch_size="256",
         seed="42",
         k_cache_quant_type="q8_0",
         v_cache_quant_type="q8_0",
@@ -86,9 +87,23 @@ def test_build_command_adds_optional_values_in_order():
     assert build_command(form) == (
         "llama-server --model /models/a.gguf --port ${PORT} "
         "--mmproj /models/mmproj.gguf "
-        "--ctx-size 2048 --n-gpu-layers 0 --threads 8 --batch-size 512 "
+        "--ctx-size 2048 --n-gpu-layers 0 --threads 8 --batch-size 512 --ubatch-size 256 "
         "--seed 42 --cache-type-k q8_0 --cache-type-v q8_0"
     )
+
+
+def test_parse_command_extracts_ubatch_size_long_and_short_options():
+    long_form = parse_command(
+        "sample",
+        "llama-server --model D:/Models/model.gguf --ubatch-size 256",
+    )
+    short_form = parse_command(
+        "sample",
+        "llama-server --model D:/Models/model.gguf -ub 128",
+    )
+
+    assert long_form.ubatch_size == "256"
+    assert short_form.ubatch_size == "128"
 
 
 def test_parse_command_extracts_known_cache_types_without_custom_args():

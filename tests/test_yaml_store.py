@@ -80,7 +80,29 @@ def test_save_creates_backup_and_replaces_file():
     assert ok
     assert "Saved" in message
     assert backup is not None and backup.exists()
+    assert backup.parent == config.parent / "config_backup"
+    assert backup.name == "config.yaml.bak"
     assert "added:" in config.read_text(encoding="utf-8")
+
+
+def test_save_uses_timestamped_backup_name_inside_backup_directory_when_simple_name_exists():
+    tmp_path = work_dir()
+    config = tmp_path / "config.yaml"
+    backup_dir = tmp_path / "config_backup"
+    config.write_text("models: {}\n", encoding="utf-8")
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    (backup_dir / "config.yaml.bak").write_text("old backup\n", encoding="utf-8")
+    store = YamlConfigStore()
+    data, _raw = store.load(config)
+
+    ok, _message, backup = store.save(config, data)
+
+    assert ok
+    assert backup is not None and backup.exists()
+    assert backup.parent == backup_dir
+    assert backup.name.startswith("config.yaml.")
+    assert backup.name.endswith(".bak")
+    assert backup.name != "config.yaml.bak"
 
 
 def test_validation_failure_does_not_modify_file():
@@ -135,6 +157,25 @@ def test_model_service_builds_list_items_from_existing_models():
     assert items[0].subtitle == "Sample Model"
     assert items[0].model_path == "/models/sample.gguf"
     assert items[0].ttl == "60"
+
+
+def test_model_service_deletes_selected_model_and_preserves_other_entries():
+    store = YamlConfigStore()
+    model_service = ModelConfigService()
+    data = store.parse_raw(
+        """models:
+  keep:
+    cmd: llama-server --model /models/keep.gguf --port ${PORT}
+  remove:
+    cmd: llama-server --model /models/remove.gguf --port ${PORT}
+"""
+    )
+
+    deleted = model_service.delete_model(data, "remove")
+
+    assert deleted is True
+    assert "remove" not in data["models"]
+    assert "keep" in data["models"]
 
 
 def test_global_settings_service_applies_and_removes_root_settings():

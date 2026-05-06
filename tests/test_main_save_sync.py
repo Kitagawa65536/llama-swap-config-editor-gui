@@ -36,3 +36,24 @@ def test_apply_pending_form_edits_for_save_updates_cmd_context_length():
     assert "--ctx-size 4096" in cmd
     assert "context_length_max" not in app.state.raw_yaml
     assert app.state.dirty is True
+
+
+def test_model_list_items_filters_by_model_id_search_term():
+    store = YamlConfigStore()
+    data = store.parse_raw(
+        """models:
+  qwen-14b:
+    cmd: llama-server --model /models/qwen.gguf --port ${PORT}
+  mistral-7b:
+    cmd: llama-server --model /models/mistral.gguf --port ${PORT}
+"""
+    )
+    app = LlamaSwapConfigEditor.__new__(LlamaSwapConfigEditor)
+    app.store = store
+    app.model_service = ModelConfigService()
+    app.state = ConfigState(data=data)
+    app.model_search_term = "QWEN"
+
+    items = app.model_list_items()
+
+    assert [item.model_id for item in items] == ["qwen-14b"]

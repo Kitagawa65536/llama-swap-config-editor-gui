@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import platform
 from pathlib import Path
 
@@ -14,7 +15,7 @@ from schema_validator import ConfigSchemaValidator
 from ui.advanced import build_advanced
 from ui.global_settings import build_global_settings
 from ui.home import build_home
-from ui.models_view import build_models
+from ui.models_view import build_model_cards, build_models
 from ui.raw_yaml import build_raw_yaml
 from yaml_store import YamlConfigStore
 
@@ -44,6 +45,10 @@ class LlamaSwapConfigEditor:
         self.state = ConfigState()
         self.validator = ConfigSchemaValidator()
         self.selected_model_id: str | None = None
+        self.model_search_term: str = ""
+        self._model_search_revision = 0
+        self.model_list_column: ft.Column | None = None
+        self._active_dialog: ft.AlertDialog | None = None
         self.current_model_form: ModelForm | None = None
         self.gguf_context_limits: dict[str, int] = {}
         self.global_form = GlobalSettingsForm()
@@ -272,6 +277,53 @@ class LlamaSwapConfigEditor:
         self.current_model_form = form
         self.mark_dirty("空のモデルを追加しました / Empty model added")
 
+    def delete_current_model(self, _event=None) -> None:
+        if not self.selected_model_id:
+            return
+        dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("モデルを削除しますか？ / Delete model?"),
+            content=ft.Text(
+                f"{self.selected_model_id} を config.yaml から削除します。"
+                "未反映のフォーム編集は破棄されます。"
+            ),
+            actions=[
+                ft.TextButton("Cancel", on_click=self.close_dialog),
+                ft.TextButton("Delete", on_click=self.confirm_delete_current_model),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        self._active_dialog = dialog
+        self.page.show_dialog(dialog)
+
+    def close_dialog(self, _event=None) -> None:
+        if self._active_dialog:
+            self._active_dialog.open = False
+            self._active_dialog.update()
+            self._active_dialog = None
+
+    def confirm_delete_current_model(self, _event=None) -> None:
+        model_id = self.selected_model_id
+        if self.state.data is None or not model_id:
+            self.close_dialog()
+            return
+        try:
+            deleted = self.model_service.delete_model(self.state.data, model_id)
+            self.close_dialog()
+            if not deleted:
+                self.state.last_message = f"モデルが見つかりません / Model not found: {model_id}"
+                self.refresh()
+                return
+            self.selected_model_id = None
+            self.current_model_form = None
+            self.state.raw_yaml = self.store.dump_to_string(self.state.data)
+            self.raw_editor = None
+            self.mark_dirty(f"モデルを削除しました / Model deleted: {model_id}")
+        except Exception as exc:
+            self.close_dialog()
+            self.state.last_message = f"削除失敗 / Delete failed: {exc}"
+            self.refresh()
+
     def apply_current_model(self, _event=None) -> None:
         if self.state.data is None or self.current_model_form is None:
             return
@@ -424,10 +476,37 @@ class LlamaSwapConfigEditor:
         except OSError:
             return path
 
+    def on_model_search_change(self, event: ft.ControlEvent) -> None:
+        self._model_search_revision += 1
+        revision = self._model_search_revision
+        search_term = event.control.value or ""
+        self.page.run_task(self.apply_model_search_debounced, search_term, revision)
+
+    async def apply_model_search_debounced(self, search_term: str, revision: int) -> None:
+        await asyncio.sleep(0.2)
+        if revision != self._model_search_revision:
+            return
+        normalized = search_term.strip()
+        if normalized == self.model_search_term:
+            return
+        self.model_search_term = normalized
+        self.refresh_model_list()
+
+    def refresh_model_list(self) -> None:
+        if self.page.route != "/models" or self.model_list_column is None:
+            self.refresh()
+            return
+        self.model_list_column.controls = build_model_cards(self)
+        self.model_list_column.update()
+
     def model_list_items(self) -> list[ModelListItem]:
         if self.state.data is None:
             return []
-        return self.model_service.list_items(self.state.data)
+        items = self.model_service.list_items(self.state.data)
+        if not self.model_search_term:
+            return items
+        needle = self.model_search_term.casefold()
+        return [item for item in items if needle in item.model_id.casefold()]
 
     def advanced_sections(self) -> list[AdvancedSection]:
         return self.advanced_service.sections(self.state.data)
